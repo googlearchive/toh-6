@@ -1,0 +1,163 @@
+{
+  "ngDeps": {
+    "1": "",
+    "3": [
+      {
+        "1": "dart:async",
+        "5": false
+      },
+      {
+        "1": "package:angular2/core.dart",
+        "5": false
+      },
+      {
+        "1": "package:angular2/router.dart",
+        "5": false
+      },
+      {
+        "1": "hero.dart",
+        "5": false
+      },
+      {
+        "1": "hero_detail_component.dart",
+        "5": false
+      },
+      {
+        "1": "hero_service.dart",
+        "5": false
+      }
+    ],
+    "5": [
+      {
+        "1": "HeroesComponent",
+        "5": [
+          {
+            "1": "HeroService",
+            "4": "_heroService"
+          },
+          {
+            "1": "Router",
+            "4": "_router"
+          }
+        ],
+        "6": [
+          "OnInit"
+        ],
+        "7": [
+          {
+            "2": "HeroDetailComponent"
+          }
+        ]
+      }
+    ],
+    "6": "heroes_component.dart",
+    "7": [
+      {
+        "1": "package:angular2/core.ngfactory.dart",
+        "4": "i0"
+      },
+      {
+        "1": "package:angular2/router.ngfactory.dart",
+        "4": "i1"
+      },
+      {
+        "1": "hero.ngfactory.dart",
+        "4": "i2"
+      },
+      {
+        "1": "hero_detail_component.ngfactory.dart",
+        "4": "i3"
+      },
+      {
+        "1": "hero_service.ngfactory.dart",
+        "4": "i4"
+      }
+    ]
+  },
+  "type": {
+    "HeroesComponent": {
+      "class": "Directive",
+      "isComponent": true,
+      "selector": "my-heroes",
+      "exportAs": null,
+      "type": {
+        "class": "Type",
+        "name": "HeroesComponent",
+        "moduleUrl": "asset:angular2_tour_of_heroes/lib/heroes_component.dart",
+        "prefix": null,
+        "isHost": false,
+        "value": null,
+        "diDeps": [
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "HeroService",
+                "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero_service.dart",
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
+          },
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "Router",
+                "moduleUrl": "asset:angular2/lib/src/router/router.dart",
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
+          }
+        ]
+      },
+      "changeDetection": 5,
+      "inputs": {},
+      "outputs": {},
+      "hostListeners": {},
+      "hostProperties": {},
+      "hostAttributes": {},
+      "lifecycleHooks": [
+        0
+      ],
+      "template": {
+        "encapsulation": 0,
+        "template": "<h2>My Heroes</h2>\n<div class=\"error\" *ngIf=\"errorMessage != null\">{{errorMessage}}</div>\n<div>\n  Name: <input #newHeroName />\n  <button (click)=\"addHero(newHeroName.value); newHeroName.value=''\">\n    Add New Hero\n  </button>\n</div>\n<ul class=\"heroes\">\n  <li *ngFor=\"let hero of heroes\"\n    [class.selected]=\"hero === selectedHero\"\n    (click)=\"onSelect(hero)\">\n    <span class=\"badge\">{{hero.id}}</span> {{hero.name}}\n    <button class=\"delete-button\" (click)=\"deleteHero(hero.id, $event)\">x</button>\n  </li>\n</ul>\n<div *ngIf=\"selectedHero != null\">\n  <h2>\n    {{selectedHero.name | uppercase}} is my hero\n  </h2>\n  <button (click)=\"gotoDetail()\">View Details</button>\n</div>\n",
+        "templateUrl": "asset:angular2_tour_of_heroes/lib/heroes_component.html",
+        "styles": [],
+        "styleUrls": [
+          "asset:angular2_tour_of_heroes/lib/heroes_component.css"
+        ],
+        "ngContentSelectors": []
+      },
+      "providers": [],
+      "viewProviders": [],
+      "queries": [],
+      "viewQueries": []
+    }
+  },
+  "alias": {}
+}

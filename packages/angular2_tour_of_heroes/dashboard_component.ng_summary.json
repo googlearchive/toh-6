@@ -1,0 +1,132 @@
+{
+  "ngDeps": {
+    "1": "",
+    "3": [
+      {
+        "1": "dart:async",
+        "5": false
+      },
+      {
+        "1": "package:angular2/core.dart",
+        "5": false
+      },
+      {
+        "1": "package:angular2/router.dart",
+        "5": false
+      },
+      {
+        "1": "hero.dart",
+        "5": false
+      },
+      {
+        "1": "hero_service.dart",
+        "5": false
+      }
+    ],
+    "5": [
+      {
+        "1": "DashboardComponent",
+        "5": [
+          {
+            "1": "HeroService",
+            "4": "_heroService"
+          },
+          {
+            "1": "Router",
+            "4": "_router"
+          }
+        ],
+        "6": [
+          "OnInit"
+        ]
+      }
+    ],
+    "6": "dashboard_component.dart"
+  },
+  "type": {
+    "DashboardComponent": {
+      "class": "Directive",
+      "isComponent": true,
+      "selector": "my-dashboard",
+      "exportAs": null,
+      "type": {
+        "class": "Type",
+        "name": "DashboardComponent",
+        "moduleUrl": "asset:angular2_tour_of_heroes/lib/dashboard_component.dart",
+        "prefix": null,
+        "isHost": false,
+        "value": null,
+        "diDeps": [
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "HeroService",
+                "moduleUrl": null,
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
+          },
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "Router",
+                "moduleUrl": null,
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
+          }
+        ]
+      },
+      "changeDetection": 5,
+      "inputs": {},
+      "outputs": {},
+      "hostListeners": {},
+      "hostProperties": {},
+      "hostAttributes": {},
+      "lifecycleHooks": [
+        0
+      ],
+      "template": {
+        "encapsulation": 0,
+        "template": "<h3>Top Heroes</h3>\n<div class=\"grid grid-pad\">\n  <div *ngFor=\"let hero of heroes\" (click)=\"gotoDetail(hero)\" class=\"col-1-4\" >\n    <div class=\"module hero\">\n      <h4>{{hero.name}}</h4>\n    </div>\n  </div>\n</div>\n",
+        "templateUrl": "asset:angular2_tour_of_heroes/lib/dashboard_component.html",
+        "styles": [],
+        "styleUrls": [
+          "asset:angular2_tour_of_heroes/lib/dashboard_component.css"
+        ],
+        "ngContentSelectors": []
+      },
+      "providers": [],
+      "viewProviders": [],
+      "queries": [],
+      "viewQueries": []
+    }
+  },
+  "alias": {}
+}

@@ -1,0 +1,20 @@
+{
+  "ngDeps": null,
+  "type": {
+    "Hero": {
+      "class": "Identifier",
+      "name": "Hero",
+      "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero.dart",
+      "prefix": null,
+      "value": null
+    },
+    "_toInt": {
+      "class": "Identifier",
+      "name": "_toInt",
+      "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero.dart",
+      "prefix": null,
+      "value": null
+    }
+  },
+  "alias": {}
+}
