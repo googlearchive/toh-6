@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:angular2/core.dart';
 import 'package:http/http.dart';
@@ -21,16 +22,17 @@ class InMemoryDataService extends MockClient {
     {'id': 19, 'name': 'Magma'},
     {'id': 20, 'name': 'Tornado'}
   ];
-
   static final List<Hero> _heroesDb =
       _initialHeroes.map((json) => new Hero.fromJson(json)).toList();
-  static int _nextId = 21;
+  static int _nextId = _heroesDb.map((hero) => hero.id).reduce(max) + 1;
 
   static Future<Response> _handler(Request request) async {
     var data;
     switch (request.method) {
       case 'GET':
-        data = _heroesDb;
+        String prefix = request.url.queryParameters['name'] ?? '';
+        final regExp = new RegExp(prefix, caseSensitive: false);
+        data = _heroesDb.where((hero) => hero.name.contains(regExp)).toList();
         break;
       case 'POST':
         var name = JSON.decode(request.body)['name'];
