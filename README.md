@@ -7,8 +7,9 @@ Welcome to the example application used in angular.io/dart's
 
 You can run a [hosted copy](http://angular-examples.github.io/toh-6) of this sample. Or run your own copy:
 
-1. Clone this repo.
-2. Download the dependencies:
+1. Clone or [download][] this repo.
+   [download]: //github.com/angular-examples/toh-6/archive/master.zip
+2. Get the dependencies:
 
   `pub get`
 3. Launch a development server:
