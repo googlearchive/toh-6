@@ -13,37 +13,29 @@ import 'hero_service.dart';
     styleUrls: const ['heroes_component.css'],
     directives: const [HeroDetailComponent])
 class HeroesComponent implements OnInit {
-  final Router _router;
-  final HeroService _heroService;
   List<Hero> heroes;
   Hero selectedHero;
-  String errorMessage;
+
+  final HeroService _heroService;
+  final Router _router;
 
   HeroesComponent(this._heroService, this._router);
 
-  Future<Null> addHero(String name) async {
-    name = name.trim();
-    if (name.isEmpty) return;
-    try {
-      heroes.add(await _heroService.save(name));
-    } catch (e) {
-      errorMessage = e.toString();
-    }
-  }
-
-  Future<Null> deleteHero(int id, event) async {
-    try {
-      event.stopPropagation();
-      await _heroService.delete(id);
-      heroes.removeWhere((hero) => hero.id == id);
-      if (selectedHero?.id == id) selectedHero = null;
-    } catch (e) {
-      errorMessage = e.toString();
-    }
-  }
-
   Future<Null> getHeroes() async {
     heroes = await _heroService.getHeroes();
+  }
+
+  Future<Null> add(String name) async {
+    name = name.trim();
+    if (name.isEmpty) return;
+    heroes.add(await _heroService.create(name));
+    selectedHero = null;
+  }
+
+  Future<Null> delete(Hero hero) async {
+    await _heroService.delete(hero.id);
+    heroes.remove(hero);
+    if (selectedHero == hero) selectedHero = null;
   }
 
   void ngOnInit() {

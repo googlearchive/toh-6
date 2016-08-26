@@ -25,7 +25,7 @@ class HeroDetailComponent implements OnInit {
   }
 
   Future<Null> save() async {
-    await _heroService.save(hero);
+    await _heroService.update(hero);
     goBack();
   }
 

@@ -29,18 +29,15 @@ class HeroService {
 
   dynamic _extractData(Response resp) => JSON.decode(resp.body)['data'];
 
-  Future<Hero> getHero(int id) async =>
-      (await getHeroes()).firstWhere((hero) => hero.id == id);
-
-  Future<Hero> save(dynamic heroOrName) =>
-      heroOrName is Hero ? _put(heroOrName) : _post(heroOrName);
-
   Exception _handleError(dynamic e) {
     print(e); // for demo purposes only
     return new Exception('Server error; cause: $e');
   }
 
-  Future<Hero> _post(String name) async {
+  Future<Hero> getHero(int id) async =>
+      (await getHeroes()).firstWhere((hero) => hero.id == id);
+
+  Future<Hero> create(String name) async {
     try {
       final response = await _http.post(_heroesUrl,
           headers: _headers, body: JSON.encode({'name': name}));
@@ -50,7 +47,7 @@ class HeroService {
     }
   }
 
-  Future<Hero> _put(Hero hero) async {
+  Future<Hero> update(Hero hero) async {
     try {
       var url = '$_heroesUrl/${hero.id}';
       final response =
