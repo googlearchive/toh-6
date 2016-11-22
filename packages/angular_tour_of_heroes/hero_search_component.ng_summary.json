@@ -15,25 +15,25 @@
         "5": false
       },
       {
+        "1": "package:stream_transformers/stream_transformers.dart",
+        "5": false
+      },
+      {
+        "1": "hero_search_service.dart",
+        "5": false
+      },
+      {
         "1": "hero.dart",
-        "5": false
-      },
-      {
-        "1": "hero_service.dart",
-        "5": false
-      },
-      {
-        "1": "hero_search_component.dart",
         "5": false
       }
     ],
     "5": [
       {
-        "1": "DashboardComponent",
+        "1": "HeroSearchComponent",
         "5": [
           {
-            "1": "HeroService",
-            "4": "_heroService"
+            "1": "HeroSearchService",
+            "4": "_heroSearchService"
           },
           {
             "1": "Router",
@@ -42,26 +42,21 @@
         ],
         "6": [
           "OnInit"
-        ],
-        "7": [
-          {
-            "2": "HeroSearchComponent"
-          }
         ]
       }
     ],
-    "6": "dashboard_component.dart"
+    "6": "hero_search_component.dart"
   },
   "type": {
-    "DashboardComponent": {
+    "HeroSearchComponent": {
       "class": "Directive",
       "isComponent": true,
-      "selector": "my-dashboard",
+      "selector": "hero-search",
       "exportAs": null,
       "type": {
         "class": "Type",
-        "name": "DashboardComponent",
-        "moduleUrl": "asset:angular2_tour_of_heroes/lib/dashboard_component.dart",
+        "name": "HeroSearchComponent",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_search_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -71,7 +66,7 @@
               "value": null,
               "identifier": {
                 "class": "Identifier",
-                "name": "HeroService",
+                "name": "HeroSearchService",
                 "moduleUrl": null,
                 "prefix": null,
                 "value": null
@@ -124,15 +119,23 @@
       ],
       "template": {
         "encapsulation": 0,
-        "template": "<h3>Top Heroes</h3>\n<div class=\"grid grid-pad\">\n  <div *ngFor=\"let hero of heroes\" (click)=\"gotoDetail(hero)\" class=\"col-1-4\">\n    <div class=\"module hero\">\n      <h4>{{hero.name}}</h4>\n    </div>\n  </div>\n</div>\n<hero-search></hero-search>\n",
-        "templateUrl": "asset:angular2_tour_of_heroes/lib/dashboard_component.html",
+        "template": "<div id=\"search-component\">\n  <h4>Hero Search</h4>\n  <input #searchBox id=\"search-box\" (keyup)=\"search(searchBox.value)\" />\n  <div>\n    <div *ngFor=\"let hero of heroes | async\"\n         (click)=\"gotoDetail(hero)\" class=\"search-result\" >\n      {{hero.name}}\n    </div>\n  </div>\n</div>\n",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/hero_search_component.html",
         "styles": [],
         "styleUrls": [
-          "asset:angular2_tour_of_heroes/lib/dashboard_component.css"
+          "asset:angular_tour_of_heroes/lib/hero_search_component.css"
         ],
         "ngContentSelectors": []
       },
-      "providers": [],
+      "providers": [
+        {
+          "class": "Identifier",
+          "name": "HeroSearchService",
+          "moduleUrl": null,
+          "prefix": null,
+          "value": null
+        }
+      ],
       "viewProviders": [],
       "queries": [],
       "viewQueries": []

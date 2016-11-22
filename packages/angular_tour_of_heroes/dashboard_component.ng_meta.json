@@ -19,25 +19,21 @@
         "5": false
       },
       {
-        "1": "hero_detail_component.dart",
+        "1": "hero_service.dart",
         "5": false
       },
       {
-        "1": "hero_service.dart",
+        "1": "hero_search_component.dart",
         "5": false
       }
     ],
     "5": [
       {
-        "1": "HeroesComponent",
+        "1": "DashboardComponent",
         "5": [
           {
             "1": "HeroService",
             "4": "_heroService"
-          },
-          {
-            "1": "Router",
-            "4": "_router"
           }
         ],
         "6": [
@@ -45,12 +41,15 @@
         ],
         "7": [
           {
-            "2": "HeroDetailComponent"
+            "2": "HeroSearchComponent"
+          },
+          {
+            "2": "ROUTER_DIRECTIVES"
           }
         ]
       }
     ],
-    "6": "heroes_component.dart",
+    "6": "dashboard_component.dart",
     "7": [
       {
         "1": "package:angular2/core.template.dart",
@@ -65,25 +64,25 @@
         "4": "i2"
       },
       {
-        "1": "hero_detail_component.template.dart",
+        "1": "hero_service.template.dart",
         "4": "i3"
       },
       {
-        "1": "hero_service.template.dart",
+        "1": "hero_search_component.template.dart",
         "4": "i4"
       }
     ]
   },
   "type": {
-    "HeroesComponent": {
+    "DashboardComponent": {
       "class": "Directive",
       "isComponent": true,
-      "selector": "my-heroes",
+      "selector": "my-dashboard",
       "exportAs": null,
       "type": {
         "class": "Type",
-        "name": "HeroesComponent",
-        "moduleUrl": "asset:angular2_tour_of_heroes/lib/heroes_component.dart",
+        "name": "DashboardComponent",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/dashboard_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -94,29 +93,7 @@
               "identifier": {
                 "class": "Identifier",
                 "name": "HeroService",
-                "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero_service.dart",
-                "prefix": null,
-                "value": null
-              },
-              "identifierIsInstance": false
-            },
-            "query": null,
-            "viewQuery": null,
-            "value": null,
-            "isAttribute": false,
-            "isSelf": false,
-            "isHost": false,
-            "isSkipSelf": false,
-            "isOptional": false,
-            "isValue": false
-          },
-          {
-            "token": {
-              "value": null,
-              "identifier": {
-                "class": "Identifier",
-                "name": "Router",
-                "moduleUrl": "asset:angular2/lib/src/router/router.dart",
+                "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_service.dart",
                 "prefix": null,
                 "value": null
               },
@@ -146,11 +123,11 @@
       ],
       "template": {
         "encapsulation": 0,
-        "template": "<h2>My Heroes</h2>\n<div>\n  <label>Hero name:</label> <input #heroName />\n  <button (click)=\"add(heroName.value); heroName.value=''\">\n    Add\n  </button>\n</div>\n<ul class=\"heroes\">\n  <li *ngFor=\"let hero of heroes\" (click)=\"onSelect(hero)\"\n      [class.selected]=\"hero === selectedHero\">\n    <span class=\"badge\">{{hero.id}}</span>\n    <span>{{hero.name}}</span>\n    <button class=\"delete\"\n      (click)=\"delete(hero); $event.stopPropagation()\">x</button>\n  </li>\n</ul>\n<div *ngIf=\"selectedHero != null\">\n  <h2>\n    {{selectedHero.name | uppercase}} is my hero\n  </h2>\n  <button (click)=\"gotoDetail()\">View Details</button>\n</div>\n",
-        "templateUrl": "asset:angular2_tour_of_heroes/lib/heroes_component.html",
+        "template": "<h3>Top Heroes</h3>\n<div class=\"grid grid-pad\">\n  <a *ngFor=\"let hero of heroes\"  [routerLink]=\"['HeroDetail', {id: hero.id.toString()}]\"  class=\"col-1-4\">\n    <div class=\"module hero\">\n      <h4>{{hero.name}}</h4>\n    </div>\n  </a>\n</div>\n<hero-search></hero-search>\n",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/dashboard_component.html",
         "styles": [],
         "styleUrls": [
-          "asset:angular2_tour_of_heroes/lib/heroes_component.css"
+          "asset:angular_tour_of_heroes/lib/dashboard_component.css"
         ],
         "ngContentSelectors": []
       },

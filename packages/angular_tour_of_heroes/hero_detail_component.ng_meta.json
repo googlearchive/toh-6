@@ -7,15 +7,15 @@
         "5": false
       },
       {
-        "1": "dart:html",
-        "5": false
-      },
-      {
         "1": "package:angular2/core.dart",
         "5": false
       },
       {
         "1": "package:angular2/router.dart",
+        "5": false
+      },
+      {
+        "1": "package:angular2/platform/common.dart",
         "5": false
       },
       {
@@ -38,6 +38,10 @@
           {
             "1": "RouteParams",
             "4": "_routeParams"
+          },
+          {
+            "1": "Location",
+            "4": "_location"
           }
         ],
         "6": [
@@ -56,12 +60,16 @@
         "4": "i1"
       },
       {
-        "1": "hero.template.dart",
+        "1": "package:angular2/platform/common.template.dart",
         "4": "i2"
       },
       {
-        "1": "hero_service.template.dart",
+        "1": "hero.template.dart",
         "4": "i3"
+      },
+      {
+        "1": "hero_service.template.dart",
+        "4": "i4"
       }
     ]
   },
@@ -74,7 +82,7 @@
       "type": {
         "class": "Type",
         "name": "HeroDetailComponent",
-        "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero_detail_component.dart",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_detail_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -85,7 +93,7 @@
               "identifier": {
                 "class": "Identifier",
                 "name": "HeroService",
-                "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero_service.dart",
+                "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_service.dart",
                 "prefix": null,
                 "value": null
               },
@@ -122,6 +130,28 @@
             "isSkipSelf": false,
             "isOptional": false,
             "isValue": false
+          },
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "Location",
+                "moduleUrl": "asset:angular2/lib/src/platform/browser/location/location.dart",
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
           }
         ]
       },
@@ -138,10 +168,10 @@
       "template": {
         "encapsulation": 0,
         "template": "<div *ngIf=\"hero != null\">\n  <h2>{{hero.name}} details!</h2>\n  <div>\n    <label>id: </label>{{hero.id}}</div>\n  <div>\n    <label>name: </label>\n    <input [(ngModel)]=\"hero.name\" placeholder=\"name\" />\n  </div>\n  <button (click)=\"goBack()\">Back</button>\n  <button (click)=\"save()\">Save</button>\n</div>\n",
-        "templateUrl": "asset:angular2_tour_of_heroes/lib/hero_detail_component.html",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/hero_detail_component.html",
         "styles": [],
         "styleUrls": [
-          "asset:angular2_tour_of_heroes/lib/hero_detail_component.css"
+          "asset:angular_tour_of_heroes/lib/hero_detail_component.css"
         ],
         "ngContentSelectors": []
       },

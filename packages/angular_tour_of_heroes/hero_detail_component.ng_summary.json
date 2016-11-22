@@ -15,29 +15,33 @@
         "5": false
       },
       {
-        "1": "package:stream_transformers/stream_transformers.dart",
-        "5": false
-      },
-      {
-        "1": "hero_search_service.dart",
+        "1": "package:angular2/platform/common.dart",
         "5": false
       },
       {
         "1": "hero.dart",
         "5": false
+      },
+      {
+        "1": "hero_service.dart",
+        "5": false
       }
     ],
     "5": [
       {
-        "1": "HeroSearchComponent",
+        "1": "HeroDetailComponent",
         "5": [
           {
-            "1": "HeroSearchService",
-            "4": "_heroSearchService"
+            "1": "HeroService",
+            "4": "_heroService"
           },
           {
-            "1": "Router",
-            "4": "_router"
+            "1": "RouteParams",
+            "4": "_routeParams"
+          },
+          {
+            "1": "Location",
+            "4": "_location"
           }
         ],
         "6": [
@@ -45,18 +49,18 @@
         ]
       }
     ],
-    "6": "hero_search_component.dart"
+    "6": "hero_detail_component.dart"
   },
   "type": {
-    "HeroSearchComponent": {
+    "HeroDetailComponent": {
       "class": "Directive",
       "isComponent": true,
-      "selector": "hero-search",
+      "selector": "my-hero-detail",
       "exportAs": null,
       "type": {
         "class": "Type",
-        "name": "HeroSearchComponent",
-        "moduleUrl": "asset:angular2_tour_of_heroes/lib/hero_search_component.dart",
+        "name": "HeroDetailComponent",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_detail_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -66,7 +70,7 @@
               "value": null,
               "identifier": {
                 "class": "Identifier",
-                "name": "HeroSearchService",
+                "name": "HeroService",
                 "moduleUrl": null,
                 "prefix": null,
                 "value": null
@@ -88,7 +92,29 @@
               "value": null,
               "identifier": {
                 "class": "Identifier",
-                "name": "Router",
+                "name": "RouteParams",
+                "moduleUrl": null,
+                "prefix": null,
+                "value": null
+              },
+              "identifierIsInstance": false
+            },
+            "query": null,
+            "viewQuery": null,
+            "value": null,
+            "isAttribute": false,
+            "isSelf": false,
+            "isHost": false,
+            "isSkipSelf": false,
+            "isOptional": false,
+            "isValue": false
+          },
+          {
+            "token": {
+              "value": null,
+              "identifier": {
+                "class": "Identifier",
+                "name": "Location",
                 "moduleUrl": null,
                 "prefix": null,
                 "value": null
@@ -119,23 +145,15 @@
       ],
       "template": {
         "encapsulation": 0,
-        "template": "<div id=\"search-component\">\n  <h4>Hero Search</h4>\n  <input #searchBox id=\"search-box\" (keyup)=\"search(searchBox.value)\" />\n  <div>\n    <div *ngFor=\"let hero of heroes | async\"\n         (click)=\"gotoDetail(hero)\" class=\"search-result\" >\n      {{hero.name}}\n    </div>\n  </div>\n</div>\n",
-        "templateUrl": "asset:angular2_tour_of_heroes/lib/hero_search_component.html",
+        "template": "<div *ngIf=\"hero != null\">\n  <h2>{{hero.name}} details!</h2>\n  <div>\n    <label>id: </label>{{hero.id}}</div>\n  <div>\n    <label>name: </label>\n    <input [(ngModel)]=\"hero.name\" placeholder=\"name\" />\n  </div>\n  <button (click)=\"goBack()\">Back</button>\n  <button (click)=\"save()\">Save</button>\n</div>\n",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/hero_detail_component.html",
         "styles": [],
         "styleUrls": [
-          "asset:angular2_tour_of_heroes/lib/hero_search_component.css"
+          "asset:angular_tour_of_heroes/lib/hero_detail_component.css"
         ],
         "ngContentSelectors": []
       },
-      "providers": [
-        {
-          "class": "Identifier",
-          "name": "HeroSearchService",
-          "moduleUrl": null,
-          "prefix": null,
-          "value": null
-        }
-      ],
+      "providers": [],
       "viewProviders": [],
       "queries": [],
       "viewQueries": []

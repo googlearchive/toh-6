@@ -11,19 +11,19 @@
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/heroes_component.dart",
+        "1": "package:angular_tour_of_heroes/heroes_component.dart",
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/hero_service.dart",
+        "1": "package:angular_tour_of_heroes/hero_service.dart",
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/dashboard_component.dart",
+        "1": "package:angular_tour_of_heroes/dashboard_component.dart",
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/hero_detail_component.dart",
+        "1": "package:angular_tour_of_heroes/hero_detail_component.dart",
         "5": false
       }
     ],
@@ -57,7 +57,7 @@
       "type": {
         "class": "Type",
         "name": "AppComponent",
-        "moduleUrl": "asset:angular2_tour_of_heroes/lib/app_component.dart",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/app_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -74,10 +74,10 @@
       "template": {
         "encapsulation": 0,
         "template": "      <h1>{{title}}</h1>\n      <nav>\n        <a [routerLink]=\"['Dashboard']\">Dashboard</a>\n        <a [routerLink]=\"['Heroes']\">Heroes</a>\n      </nav>\n      <router-outlet></router-outlet>",
-        "templateUrl": "asset:angular2_tour_of_heroes/lib/app_component.dart",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/app_component.dart",
         "styles": [],
         "styleUrls": [
-          "asset:angular2_tour_of_heroes/lib/app_component.css"
+          "asset:angular_tour_of_heroes/lib/app_component.css"
         ],
         "ngContentSelectors": []
       },

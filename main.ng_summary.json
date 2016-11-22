@@ -11,11 +11,11 @@
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/app_component.dart",
+        "1": "package:angular_tour_of_heroes/app_component.dart",
         "5": false
       },
       {
-        "1": "package:angular2_tour_of_heroes/in_memory_data_service.dart",
+        "1": "package:angular_tour_of_heroes/in_memory_data_service.dart",
         "5": false
       },
       {
@@ -29,7 +29,7 @@
     "main": {
       "class": "Identifier",
       "name": "main",
-      "moduleUrl": "asset:angular2_tour_of_heroes/web/main.dart",
+      "moduleUrl": "asset:angular_tour_of_heroes/web/main.dart",
       "prefix": null,
       "value": null
     }
