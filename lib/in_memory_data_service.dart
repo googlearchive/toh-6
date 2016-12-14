@@ -30,9 +30,16 @@ class InMemoryDataService extends MockClient {
     var data;
     switch (request.method) {
       case 'GET':
-        String prefix = request.url.queryParameters['name'] ?? '';
-        final regExp = new RegExp(prefix, caseSensitive: false);
-        data = _heroesDb.where((hero) => hero.name.contains(regExp)).toList();
+        final id =
+            int.parse(request.url.pathSegments.last, onError: (_) => null);
+        if (id != null) {
+          data = _heroesDb
+              .firstWhere((hero) => hero.id == id); // throws if no match
+        } else {
+          String prefix = request.url.queryParameters['name'] ?? '';
+          final regExp = new RegExp(prefix, caseSensitive: false);
+          data = _heroesDb.where((hero) => hero.name.contains(regExp)).toList();
+        }
         break;
       case 'POST':
         var name = JSON.decode(request.body)['name'];
