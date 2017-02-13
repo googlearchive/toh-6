@@ -6,7 +6,8 @@ import 'package:http/http.dart';
 
 void main() {
   bootstrap(AppComponent, [provide(Client, useClass: InMemoryDataService)]
-      // Using a real back end? Import browser_client.dart and change the above to
+      // Using a real back end?
+      // Import browser_client.dart and change the above to:
       // [provide(Client, useFactory: () => new BrowserClient(), deps: [])]
       );
 }
