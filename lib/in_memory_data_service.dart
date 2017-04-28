@@ -1,3 +1,5 @@
+// Note: MockClient constructor API forces all InMemoryDataService members to
+// be static.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -17,16 +19,16 @@ class InMemoryDataService extends MockClient {
     {'id': 14, 'name': 'Celeritas'},
     {'id': 15, 'name': 'Magneta'},
     {'id': 16, 'name': 'RubberMan'},
-    {'id': 17, 'name': 'Dynama2'},
+    {'id': 17, 'name': 'Dynama'},
     {'id': 18, 'name': 'Dr IQ'},
     {'id': 19, 'name': 'Magma'},
     {'id': 20, 'name': 'Tornado'}
   ];
-  static final List<Hero> _heroesDb =
-      _initialHeroes.map((json) => new Hero.fromJson(json)).toList();
-  static int _nextId = _heroesDb.map((hero) => hero.id).fold(0, max) + 1;
+  static List<Hero> _heroesDb;
+  static int _nextId;
 
   static Future<Response> _handler(Request request) async {
+    if (_heroesDb == null) resetDb();
     var data;
     switch (request.method) {
       case 'GET':
@@ -64,6 +66,14 @@ class InMemoryDataService extends MockClient {
     return new Response(JSON.encode({'data': data}), 200,
         headers: {'content-type': 'application/json'});
   }
+
+  static resetDb() {
+    _heroesDb = _initialHeroes.map((json) => new Hero.fromJson(json)).toList();
+    _nextId = _heroesDb.map((hero) => hero.id).fold(0, max) + 1;
+  }
+
+  static String lookUpName(int id) =>
+      _heroesDb.firstWhere((hero) => hero.id == id, orElse: null)?.name;
 
   InMemoryDataService() : super(_handler);
 }
