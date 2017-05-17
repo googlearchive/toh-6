@@ -15,10 +15,6 @@ dev_dependencies:
   test: ^0.12.0
 transformers:
 - angular2:
-    platform_directives:
-    - 'package:angular2/common.dart#COMMON_DIRECTIVES'
-    platform_pipes:
-    - 'package:angular2/common.dart#COMMON_PIPES'
     entry_points: web/main.dart
     resolved_identifiers:
         BrowserClient: 'package:http/browser_client.dart'
