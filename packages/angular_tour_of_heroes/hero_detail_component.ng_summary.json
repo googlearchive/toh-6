@@ -60,7 +60,7 @@
     "HeroDetailComponent": {
       "class": "Directive",
       "isComponent": true,
-      "selector": "my-hero-detail",
+      "selector": "hero-detail",
       "exportAs": null,
       "type": {
         "class": "Type",
