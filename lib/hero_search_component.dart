@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:angular2/angular2.dart';
 import 'package:angular2/router.dart';
-import 'package:stream_transformers/stream_transformers.dart';
+import 'package:stream_transform/stream_transform.dart';
 
 import 'hero_search_service.dart';
 import 'hero.dart';
@@ -30,9 +30,9 @@ class HeroSearchComponent implements OnInit {
 
   Future<Null> ngOnInit() async {
     heroes = _searchTerms.stream
-        .transform(new Debounce(new Duration(milliseconds: 300)))
+        .transform(debounce(new Duration(milliseconds: 300)))
         .distinct()
-        .transform(new FlatMapLatest((term) => term.isEmpty
+        .transform(switchMap((term) => term.isEmpty
             ? new Stream<List<Hero>>.fromIterable([<Hero>[]])
             : _heroSearchService.search(term).asStream()))
         .handleError((e) {

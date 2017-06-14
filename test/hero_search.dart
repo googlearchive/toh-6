@@ -94,10 +94,12 @@ void heroSearchTests() {
 
 Future _typeSearchTextAndRefreshPO(String searchText) async {
   await po.search.type(searchText);
-  Stream<List> herosStream;
-  await fixture.update((c) => herosStream = c.heroes);
-  // Wait for the data to be fetched from db.
-  // (We could set a timeout, but it isn't needed with the mock db.)
-  await herosStream.first;
+  // FIXME: Waiting on the stream doesn't work anymore:
+  // https://github.com/dart-lang/stream_transform/issues/18
+  //  Stream<List> heroesStream;
+  //  await fixture.update((c) => heroesStream = c.heroes);
+  //  await heroesStream.first;
+  // Until stream_transform/issues/18 is addressed, just wait a little:
+  await new Future.delayed(const Duration(seconds: 1));
   po = await fixture.resolvePageObject(HeroSearchPO);
 }
