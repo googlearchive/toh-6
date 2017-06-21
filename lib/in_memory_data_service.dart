@@ -8,7 +8,7 @@ import 'package:angular2/angular2.dart';
 import 'package:http/http.dart';
 import 'package:http/testing.dart';
 
-import 'hero.dart';
+import 'src/hero.dart';
 
 @Injectable()
 class InMemoryDataService extends MockClient {
