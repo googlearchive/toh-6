@@ -25,7 +25,7 @@
     ],
     "5": [
       {
-        "1": "HeroSearchService",
+        "1": "HeroService",
         "4": [
           {
             "1": "Injectable",
@@ -40,23 +40,13 @@
         ]
       }
     ],
-    "6": "hero_search_service.dart",
-    "7": [
-      {
-        "1": "package:angular2/angular2.template.dart",
-        "4": "i0"
-      },
-      {
-        "1": "hero.template.dart",
-        "4": "i1"
-      }
-    ]
+    "6": "hero_service.dart"
   },
   "type": {
-    "HeroSearchService": {
+    "HeroService": {
       "class": "Type",
-      "name": "HeroSearchService",
-      "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_search_service.dart",
+      "name": "HeroService",
+      "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_service.dart",
       "prefix": null,
       "isHost": false,
       "value": null,
@@ -67,7 +57,7 @@
             "identifier": {
               "class": "Identifier",
               "name": "Client",
-              "moduleUrl": "package:http/http.dart",
+              "moduleUrl": null,
               "prefix": null,
               "value": null
             },

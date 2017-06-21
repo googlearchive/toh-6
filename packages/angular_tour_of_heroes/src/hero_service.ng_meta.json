@@ -56,7 +56,7 @@
     "HeroService": {
       "class": "Type",
       "name": "HeroService",
-      "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_service.dart",
+      "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_service.dart",
       "prefix": null,
       "isHost": false,
       "value": null,

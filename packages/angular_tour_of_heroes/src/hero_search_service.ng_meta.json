@@ -40,13 +40,23 @@
         ]
       }
     ],
-    "6": "hero_search_service.dart"
+    "6": "hero_search_service.dart",
+    "7": [
+      {
+        "1": "package:angular2/angular2.template.dart",
+        "4": "i0"
+      },
+      {
+        "1": "hero.template.dart",
+        "4": "i1"
+      }
+    ]
   },
   "type": {
     "HeroSearchService": {
       "class": "Type",
       "name": "HeroSearchService",
-      "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_search_service.dart",
+      "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_service.dart",
       "prefix": null,
       "isHost": false,
       "value": null,
@@ -57,7 +67,7 @@
             "identifier": {
               "class": "Identifier",
               "name": "Client",
-              "moduleUrl": null,
+              "moduleUrl": "package:http/http.dart",
               "prefix": null,
               "value": null
             },

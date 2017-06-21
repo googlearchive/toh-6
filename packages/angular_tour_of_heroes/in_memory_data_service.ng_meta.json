@@ -27,7 +27,7 @@
         "5": false
       },
       {
-        "1": "hero.dart",
+        "1": "src/hero.dart",
         "5": false
       }
     ],
@@ -49,7 +49,7 @@
         "4": "i0"
       },
       {
-        "1": "hero.template.dart",
+        "1": "src/hero.template.dart",
         "4": "i1"
       }
     ]

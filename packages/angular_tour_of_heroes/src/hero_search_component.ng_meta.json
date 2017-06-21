@@ -55,7 +55,25 @@
         ]
       }
     ],
-    "6": "hero_search_component.dart"
+    "6": "hero_search_component.dart",
+    "7": [
+      {
+        "1": "package:angular2/angular2.template.dart",
+        "4": "i0"
+      },
+      {
+        "1": "package:angular2/router.template.dart",
+        "4": "i1"
+      },
+      {
+        "1": "hero_search_service.template.dart",
+        "4": "i2"
+      },
+      {
+        "1": "hero.template.dart",
+        "4": "i3"
+      }
+    ]
   },
   "type": {
     "HeroSearchComponent": {
@@ -66,7 +84,7 @@
       "type": {
         "class": "Type",
         "name": "HeroSearchComponent",
-        "moduleUrl": "asset:angular_tour_of_heroes/lib/hero_search_component.dart",
+        "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_component.dart",
         "prefix": null,
         "isHost": false,
         "value": null,
@@ -77,7 +95,7 @@
               "identifier": {
                 "class": "Identifier",
                 "name": "HeroSearchService",
-                "moduleUrl": null,
+                "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_service.dart",
                 "prefix": null,
                 "value": null
               },
@@ -97,7 +115,7 @@
               "identifier": {
                 "class": "Identifier",
                 "name": "Router",
-                "moduleUrl": null,
+                "moduleUrl": "asset:angular2/lib/src/router/router.dart",
                 "prefix": null,
                 "value": null
               },
@@ -126,20 +144,85 @@
       "template": {
         "encapsulation": 0,
         "template": "<div id=\"search-component\">\n  <h4>Hero Search</h4>\n  <input #searchBox id=\"search-box\"\n         (change)=\"search(searchBox.value)\"\n         (keyup)=\"search(searchBox.value)\" />\n  <div>\n    <div *ngFor=\"let hero of heroes | async\"\n         (click)=\"gotoDetail(hero)\" class=\"search-result\" >\n      {{hero.name}}\n    </div>\n  </div>\n</div>\n",
-        "templateUrl": "asset:angular_tour_of_heroes/lib/hero_search_component.html",
+        "templateUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_component.html",
         "styles": [],
         "styleUrls": [
-          "asset:angular_tour_of_heroes/lib/hero_search_component.css"
+          "asset:angular_tour_of_heroes/lib/src/hero_search_component.css"
         ],
         "ngContentSelectors": []
       },
       "providers": [
         {
-          "class": "Identifier",
-          "name": "HeroSearchService",
-          "moduleUrl": null,
-          "prefix": null,
-          "value": null
+          "class": "Provider",
+          "token": {
+            "value": null,
+            "identifier": {
+              "class": "Type",
+              "name": "HeroSearchService",
+              "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_service.dart",
+              "prefix": null,
+              "isHost": false,
+              "value": null,
+              "diDeps": [
+                {
+                  "token": {
+                    "value": null,
+                    "identifier": {
+                      "class": "Identifier",
+                      "name": "Client",
+                      "moduleUrl": "package:http/http.dart",
+                      "prefix": null,
+                      "value": null
+                    },
+                    "identifierIsInstance": false
+                  },
+                  "value": null,
+                  "isAttribute": false,
+                  "isSelf": false,
+                  "isHost": false,
+                  "isSkipSelf": false,
+                  "isOptional": false,
+                  "isValue": false
+                }
+              ]
+            },
+            "identifierIsInstance": false
+          },
+          "useClass": {
+            "class": "Type",
+            "name": "HeroSearchService",
+            "moduleUrl": "asset:angular_tour_of_heroes/lib/src/hero_search_service.dart",
+            "prefix": null,
+            "isHost": false,
+            "value": null,
+            "diDeps": [
+              {
+                "token": {
+                  "value": null,
+                  "identifier": {
+                    "class": "Identifier",
+                    "name": "Client",
+                    "moduleUrl": "package:http/http.dart",
+                    "prefix": null,
+                    "value": null
+                  },
+                  "identifierIsInstance": false
+                },
+                "value": null,
+                "isAttribute": false,
+                "isSelf": false,
+                "isHost": false,
+                "isSkipSelf": false,
+                "isOptional": false,
+                "isValue": false
+              }
+            ]
+          },
+          "useExisting": null,
+          "useValue": null,
+          "useFactory": null,
+          "multi": false,
+          "deps": null
         }
       ],
       "viewProviders": [],
