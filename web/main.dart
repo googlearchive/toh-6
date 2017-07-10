@@ -16,7 +16,7 @@ import 'package:http/browser_client.dart';
 
 void main() {
   bootstrap(AppComponent, [
-    provide(Client, useFactory: () => new BrowserClient(), deps: [])
+    provide(BrowserClient, useFactory: () => new BrowserClient(), deps: [])
   ]);
 }
 */
