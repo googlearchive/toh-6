@@ -64,7 +64,7 @@ void basicTests() {
 
 void selectedHeroTests() {
   setUp(() async {
-    await po.clickHero(targetHeroIndex);
+    await po.selectHero(targetHeroIndex);
     po = await fixture.resolvePageObject(HeroesPO);
   });
 
@@ -88,7 +88,7 @@ void selectedHeroTests() {
   });
 
   test('select another hero', () async {
-    await po.clickHero(0);
+    await po.selectHero(0);
     po = await fixture.resolvePageObject(HeroesPO);
     final heroData = {'id': 11, 'name': 'Mr. Nice'};
     expect(await po.selectedHero, heroData);
@@ -108,7 +108,7 @@ void addHeroTests() {
   });
 
   test('select new hero', () async {
-    await po.clickHero(numHeroes);
+    await po.selectHero(numHeroes);
     po = await fixture.resolvePageObject(HeroesPO);
     expect(po.heroes.length, numHeroes + 1);
     expect((await po.selectedHero)['name'], newHeroName);

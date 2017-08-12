@@ -42,7 +42,6 @@ void main() {
 
   test('null initial @Input() hero has an empty view', () async {
     fixture = await testBed.create();
-    po = await fixture.resolvePageObject(HeroDetailPO);
     expect(fixture.rootElement.text.trim(), '');
   });
 

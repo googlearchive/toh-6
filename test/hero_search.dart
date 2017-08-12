@@ -86,20 +86,16 @@ void heroSearchTests() {
 
   test('select hero and navigate to detail', () async {
     clearInteractions(mockPlatformLocation);
-    await po.clickHero(0);
+    await po.selectHero(0);
     final c = verify(mockPlatformLocation.pushState(any, any, captureAny));
     expect(c.captured.single, '/detail/15');
   });
 }
 
 Future _typeSearchTextAndRefreshPO(String searchText) async {
+  Future firstHero;
+  await fixture.update((c) => firstHero = c.heroes.first);
   await po.search.type(searchText);
-  // FIXME: Waiting on the stream doesn't work anymore:
-  // https://github.com/dart-lang/stream_transform/issues/18
-  //  Stream<List> heroesStream;
-  //  await fixture.update((c) => heroesStream = c.heroes);
-  //  await heroesStream.first;
-  // Until stream_transform/issues/18 is addressed, just wait a little:
-  await new Future.delayed(const Duration(seconds: 1));
+  await firstHero;
   po = await fixture.resolvePageObject(HeroSearchPO);
 }
