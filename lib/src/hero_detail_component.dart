@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:angular/angular.dart';
+import 'package:angular_forms/angular_forms.dart';
 import 'package:angular_router/angular_router.dart';
 
 import 'hero.dart';
@@ -10,7 +11,7 @@ import 'hero_service.dart';
   selector: 'hero-detail',
   templateUrl: 'hero_detail_component.html',
   styleUrls: const ['hero_detail_component.css'],
-  directives: const [COMMON_DIRECTIVES],
+  directives: const [CORE_DIRECTIVES, formDirectives],
 )
 class HeroDetailComponent implements OnInit {
   Hero hero;
