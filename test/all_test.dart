@@ -2,7 +2,7 @@
 @TestOn('browser')
 library heroes_test;
 
-import 'package:angular2/angular2.dart';
+import 'package:angular/angular.dart';
 import 'package:test/test.dart';
 
 import 'dashboard.dart' as dashboard;
