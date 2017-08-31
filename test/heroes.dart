@@ -1,8 +1,8 @@
 @Tags(const ['aot'])
 @TestOn('browser')
 
-import 'package:angular2/angular2.dart';
-import 'package:angular2/router.dart';
+import 'package:angular/angular.dart';
+import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/heroes_component.dart';
