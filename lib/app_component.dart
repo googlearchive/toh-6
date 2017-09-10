@@ -29,5 +29,5 @@ import 'package:angular_tour_of_heroes/src/hero_detail_component.dart';
   const Route(path: '/heroes', name: 'Heroes', component: HeroesComponent)
 ])
 class AppComponent {
-  String title = 'Tour of Heroes';
+  final title = 'Tour of Heroes';
 }
