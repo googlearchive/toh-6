@@ -15,11 +15,10 @@ import 'hero_service.dart';
   pipes: const [COMMON_PIPES],
 )
 class HeroesComponent implements OnInit {
-  List<Hero> heroes;
-  Hero selectedHero;
-
   final HeroService _heroService;
   final Router _router;
+  List<Hero> heroes;
+  Hero selectedHero;
 
   HeroesComponent(this._heroService, this._router);
 
@@ -40,13 +39,9 @@ class HeroesComponent implements OnInit {
     if (selectedHero == hero) selectedHero = null;
   }
 
-  void ngOnInit() {
-    getHeroes();
-  }
+  void ngOnInit() => getHeroes();
 
-  void onSelect(Hero hero) {
-    selectedHero = hero;
-  }
+  void onSelect(Hero hero) => selectedHero = hero;
 
   Future<Null> gotoDetail() => _router.navigate([
         'HeroDetail',
