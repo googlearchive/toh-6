@@ -7,17 +7,18 @@ import 'package:angular_tour_of_heroes/src/dashboard_component.dart';
 import 'package:angular_tour_of_heroes/src/hero_detail_component.dart';
 
 @Component(
-    selector: 'my-app',
-    template: '''
+  selector: 'my-app',
+  template: '''
       <h1>{{title}}</h1>
       <nav>
         <a [routerLink]="['Dashboard']">Dashboard</a>
         <a [routerLink]="['Heroes']">Heroes</a>
       </nav>
       <router-outlet></router-outlet>''',
-    styleUrls: const ['app_component.css'],
-    directives: const [ROUTER_DIRECTIVES],
-    providers: const [HeroService, ROUTER_PROVIDERS])
+  styleUrls: const ['app_component.css'],
+  directives: const [ROUTER_DIRECTIVES],
+  providers: const [HeroService],
+)
 @RouteConfig(const [
   const Route(
       path: '/dashboard',
