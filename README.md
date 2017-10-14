@@ -4,7 +4,7 @@ Welcome to the example app used in the
 [Tour of Heroes: HTTP](https://webdev.dartlang.org/angular/tutorial/toh-pt6) page
 of [Dart for the web](https://webdev.dartlang.org).
 
-You can run a [hosted copy](https://webdev.dartlang.org/examples/ng/doc/toh-6) of this
+You can run a [hosted copy](https://webdev.dartlang.org/examples/toh-6) of this
 sample. Or run your own copy:
 
 1. Create a local copy of this repo (use the "Clone or download" button above).
@@ -19,7 +19,7 @@ you'll have to wait a bit while pub converts the app.
 
 *Note:* The content of this repository is generated from the
 [Angular docs repository][docs repo] by running the
-[dart-doc-syncer](//github.com/angular/dart-doc-syncer) tool.
+[dart-doc-syncer](//github.com/dart-lang/dart-doc-syncer) tool.
 If you find a problem with this sample's code, please open an [issue][].
 
 [docs repo]: //github.com/dart-lang/site-webdev/tree/master/examples/ng/doc/toh-6
