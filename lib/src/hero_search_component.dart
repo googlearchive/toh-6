@@ -40,11 +40,5 @@ class HeroSearchComponent implements OnInit {
     });
   }
 
-  void gotoDetail(Hero hero) {
-    var link = [
-      'HeroDetail',
-      {'id': hero.id.toString()}
-    ];
-    _router.navigate(link);
-  }
+  Future gotoDetail(Hero hero) => _router.navigate('/detail/${hero.id}');
 }

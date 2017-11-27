@@ -6,9 +6,7 @@ import 'package:http/http.dart';
 
 void main() {
   bootstrap(AppComponent, [
-    ROUTER_PROVIDERS,
-    // Remove next line in production
-    provide(LocationStrategy, useClass: HashLocationStrategy),
+    routerProvidersHash, // You can use routerProviders in production
     provide(Client, useClass: InMemoryDataService),
     // Using a real back end?
     // Import browser_client.dart and change the above to:
@@ -20,9 +18,7 @@ import 'package:http/browser_client.dart';
 
 void main() {
   bootstrap(AppComponent, [
-    ROUTER_PROVIDERS,
-    // Remove next line in production
-    provide(LocationStrategy, useClass: HashLocationStrategy),
+    routerProvidersHash, // You can use routerProviders in production
     provide(BrowserClient, useFactory: () => new BrowserClient(), deps: [])
   ]);
 }

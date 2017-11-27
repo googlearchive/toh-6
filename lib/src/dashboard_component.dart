@@ -11,7 +11,7 @@ import 'hero_search_component.dart';
   selector: 'my-dashboard',
   templateUrl: 'dashboard_component.html',
   styleUrls: const ['dashboard_component.css'],
-  directives: const [CORE_DIRECTIVES, HeroSearchComponent, ROUTER_DIRECTIVES],
+  directives: const [CORE_DIRECTIVES, HeroSearchComponent, routerDirectives],
 )
 class DashboardComponent implements OnInit {
   List<Hero> heroes;

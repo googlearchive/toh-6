@@ -16,31 +16,25 @@ import 'hero_detail_po.dart';
 NgTestFixture<HeroDetailComponent> fixture;
 HeroDetailPO po;
 
-class MockPlatformLocation extends Mock implements PlatformLocation {}
-
-final mockPlatformLocation = new MockPlatformLocation();
+final mockLocation = new MockLocation();
+final mockRouterState = new MockRouterState();
 
 @AngularEntrypoint()
 void main() {
-  final baseProviders = new List.from(ROUTER_PROVIDERS)
-    ..addAll([
-      provide(APP_BASE_HREF, useValue: '/'),
-      provide(Client, useClass: InMemoryDataService),
-      provide(PlatformLocation, useValue: mockPlatformLocation),
-      provide(RouteParams, useValue: new RouteParams({})),
-      HeroService,
-    ]);
-  final testBed =
-      new NgTestBed<HeroDetailComponent>().addProviders(baseProviders);
+  final testBed = new NgTestBed<HeroDetailComponent>().addProviders([
+    provide(Client, useClass: InMemoryDataService),
+    HeroService,
+    provide(Location, useValue: mockLocation),
+  ]);
 
-  setUp(() {
+  setUp(() async {
+    fixture = await testBed.create();
     InMemoryDataService.resetDb();
   });
 
   tearDown(disposeAnyRunningTest);
 
   test('No initial hero results in an empty view', () async {
-    fixture = await testBed.create();
     expect(fixture.rootElement.text.trim(), '');
   });
 
@@ -53,13 +47,15 @@ void main() {
       'name': "${targetHero['name']}$nameSuffix"
     };
 
+    setUpAll(() async {
+      when(mockRouterState.parameters)
+          .thenReturn({'id': '${targetHero['id']}'});
+    });
+
     setUp(() async {
-      final groupTestBed = testBed.fork().addProviders([
-        provide(RouteParams,
-            useValue: new RouteParams({'id': targetHero['id'].toString()}))
-      ]);
-      fixture = await groupTestBed.create();
+      await fixture.update((c) => c.onActivate(null, mockRouterState));
       po = await fixture.resolvePageObject(HeroDetailPO);
+      clearInteractions(mockLocation);
     });
 
     test('show hero details', () async {
@@ -68,7 +64,7 @@ void main() {
 
     test('back button', () async {
       await po.back();
-      verify(mockPlatformLocation.back());
+      verify(mockLocation.back());
     });
 
     group('Update name:', () {
@@ -82,17 +78,19 @@ void main() {
 
       test('discard changes', () async {
         await po.back();
-        verify(mockPlatformLocation.back());
         final name = InMemoryDataService.lookUpName(targetHero['id']);
         expect(name, targetHero['name']);
       });
 
       test('save changes and go back', () async {
         await po.save();
-        verify(mockPlatformLocation.back());
         final name = InMemoryDataService.lookUpName(targetHero['id']);
         expect(name, updatedHero['name']);
       });
     });
   });
 }
+
+class MockLocation extends Mock implements Location {}
+
+class MockRouterState extends Mock implements RouterState {}

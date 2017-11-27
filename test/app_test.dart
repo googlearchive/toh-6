@@ -22,7 +22,7 @@ class MockPlatformLocation extends Mock implements PlatformLocation {}
 void main() {
   final providers = [
     provide(APP_BASE_HREF, useValue: '/'),
-    provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),
+    // FIXME provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),
     provide(PlatformLocation, useValue: mockPlatformLocation),
   ];
 

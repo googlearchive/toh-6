@@ -6,7 +6,6 @@ import 'dart:async';
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
-import 'package:angular_tour_of_heroes/app_component.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/hero_search_component.dart';
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
@@ -19,28 +18,17 @@ import 'hero_search_po.dart';
 NgTestFixture<HeroSearchComponent> fixture;
 HeroSearchPO po;
 
-final mockPlatformLocation = new MockPlatformLocation();
+final mockRouter = new MockRouter();
 
-class MockPlatformLocation extends Mock implements PlatformLocation {}
+class MockRouter extends Mock implements Router {}
 
 @AngularEntrypoint()
 void main() {
-  final providers = new List.from(ROUTER_PROVIDERS)
-    ..addAll([
-      provide(APP_BASE_HREF, useValue: '/'),
-      provide(Client, useClass: InMemoryDataService),
-      provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),
-      provide(PlatformLocation, useValue: mockPlatformLocation),
-      HeroService,
-    ]);
-  final testBed = new NgTestBed<HeroSearchComponent>().addProviders(providers);
-
-  setUpAll(() async {
-    when(mockPlatformLocation.pathname).thenReturn('');
-    when(mockPlatformLocation.search).thenReturn('');
-    when(mockPlatformLocation.hash).thenReturn('');
-    when(mockPlatformLocation.getBaseHrefFromDOM()).thenReturn('');
-  });
+  final testBed = new NgTestBed<HeroSearchComponent>().addProviders([
+    provide(Client, useClass: InMemoryDataService),
+    HeroService,
+    provide(Router, useValue: mockRouter),
+  ]);
 
   setUp(() async {
     InMemoryDataService.resetDb();
@@ -84,9 +72,9 @@ void heroSearchTests() {
   });
 
   test('select hero and navigate to detail', () async {
-    clearInteractions(mockPlatformLocation);
+    clearInteractions(mockRouter);
     await po.selectHero(0);
-    final c = verify(mockPlatformLocation.pushState(any, any, captureAny));
+    final c = verify(mockRouter.navigate(captureAny));
     expect(c.captured.single, '/detail/15');
   });
 }
