@@ -1,4 +1,3 @@
-@Tags(const ['aot'])
 @TestOn('browser')
 
 import 'package:angular/angular.dart';
@@ -25,7 +24,6 @@ final mockRouter = new MockRouter();
 
 class MockRouter extends Mock implements Router {}
 
-@AngularEntrypoint()
 void main() {
   final testBed = new NgTestBed<HeroesComponent>().addProviders([
     provide(Client, useClass: InMemoryDataService),

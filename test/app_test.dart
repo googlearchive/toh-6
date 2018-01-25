@@ -1,5 +1,4 @@
 @Skip('AppComponent tests need bootstrap equivalent for the Router init')
-@Tags(const ['aot'])
 @TestOn('browser')
 
 import 'package:angular/angular.dart';
@@ -10,6 +9,7 @@ import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
 import 'app_po.dart';
+import 'app_test.template.dart' as ng;
 
 NgTestFixture<AppComponent> fixture;
 AppPO appPO;
@@ -18,8 +18,8 @@ final mockPlatformLocation = new MockPlatformLocation();
 
 class MockPlatformLocation extends Mock implements PlatformLocation {}
 
-@AngularEntrypoint()
 void main() {
+  ng.initReflector();
   final providers = [
     provide(APP_BASE_HREF, useValue: '/'),
     // FIXME provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),

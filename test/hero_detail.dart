@@ -1,4 +1,3 @@
-@Tags(const ['aot'])
 @TestOn('browser')
 
 import 'package:angular/angular.dart';
@@ -19,7 +18,6 @@ HeroDetailPO po;
 final mockLocation = new MockLocation();
 final mockRouterState = new MockRouterState();
 
-@AngularEntrypoint()
 void main() {
   final testBed = new NgTestBed<HeroDetailComponent>().addProviders([
     provide(Client, useClass: InMemoryDataService),
