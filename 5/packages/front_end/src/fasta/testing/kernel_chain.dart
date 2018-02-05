@@ -32,7 +32,7 @@ import 'package:kernel/text/ast_to_text.dart' show Printer;
 import 'package:testing/testing.dart'
     show ChainContext, Result, StdioProcess, Step, TestDescription;
 
-import 'package:front_end/front_end.dart';
+import 'package:front_end/src/api_prototype/front_end.dart';
 
 import 'package:front_end/src/base/processed_options.dart'
     show ProcessedOptions;
@@ -120,15 +120,17 @@ class MatchExpectation extends Step<Program, Program, ChainContext> {
     Library library = program.libraries
         .firstWhere((Library library) => library.importUri.scheme != "dart");
     Uri uri = library.importUri;
+    Uri base = uri.resolve(".");
     StringBuffer buffer = new StringBuffer();
     new Printer(buffer).writeLibraryFile(library);
+    String actual = "$buffer".replaceAll("$base", "org-dartlang-testcase:///");
 
     File expectedFile = new File("${uri.toFilePath()}$suffix");
     if (await expectedFile.exists()) {
       String expected = await expectedFile.readAsString();
-      if (expected.trim() != "$buffer".trim()) {
+      if (expected.trim() != actual.trim()) {
         if (!updateExpectations) {
-          String diff = await runDiff(expectedFile.uri, "$buffer");
+          String diff = await runDiff(expectedFile.uri, actual);
           return fail(null, "$uri doesn't match ${expectedFile.uri}\n$diff");
         }
       } else {
@@ -137,13 +139,13 @@ class MatchExpectation extends Step<Program, Program, ChainContext> {
     }
     if (updateExpectations) {
       await openWrite(expectedFile.uri, (IOSink sink) {
-        sink.writeln("$buffer".trim());
+        sink.writeln(actual.trim());
       });
       return pass(program);
     } else {
       return fail(program, """
 Please create file ${expectedFile.path} with this content:
-$buffer""");
+$actual""");
     }
   }
 }
@@ -273,9 +275,9 @@ class BytesCollector implements Sink<List<int>> {
 }
 
 Future<String> runDiff(Uri expected, String actual) async {
-  // TODO(ahe): Implement this for Windows.
-  StdioProcess process = await StdioProcess
-      .run("diff", <String>["-u", expected.toFilePath(), "-"], input: actual);
+  StdioProcess process = await StdioProcess.run(
+      "git", <String>["diff", "--no-index", "-u", expected.toFilePath(), "-"],
+      input: actual, runInShell: true);
   return process.output;
 }
 

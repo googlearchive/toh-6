@@ -16,15 +16,9 @@ import '../messages.dart'
     show
         LocatedMessage,
         Message,
-        error,
-        nit,
-        report,
         templateInternalProblemConstructorNotFound,
         templateInternalProblemNotFoundIn,
-        templateInternalProblemPrivateConstructorAccess,
-        warning;
-
-import '../severity.dart' show Severity;
+        templateInternalProblemPrivateConstructorAccess;
 
 import 'builder.dart'
     show
@@ -35,8 +29,7 @@ import 'builder.dart'
         PrefixBuilder,
         Scope,
         ScopeBuilder,
-        TypeBuilder,
-        VoidTypeBuilder;
+        TypeBuilder;
 
 abstract class LibraryBuilder<T extends TypeBuilder, R>
     extends ModifierBuilder {
@@ -52,15 +45,14 @@ abstract class LibraryBuilder<T extends TypeBuilder, R>
 
   LibraryBuilder partOfLibrary;
 
-  /// True if a compile-time error has been reported in this library.
-  bool hasCompileTimeErrors = false;
-
   bool mayImplementRestrictedTypes = false;
 
   LibraryBuilder(Uri fileUri, this.scope, this.exportScope)
       : scopeBuilder = new ScopeBuilder(scope),
         exportScopeBuilder = new ScopeBuilder(exportScope),
         super(null, -1, fileUri);
+
+  bool get isPart => false;
 
   @override
   String get debugName => "LibraryBuilder";
@@ -86,37 +78,18 @@ abstract class LibraryBuilder<T extends TypeBuilder, R>
   /// arguments passed to this method.
   ///
   /// If [fileUri] is null, it defaults to `this.fileUri`.
-  void addCompileTimeError(Message message, int charOffset, Uri uri,
-      {bool silent: false, bool wasHandled: false, LocatedMessage context}) {
-    hasCompileTimeErrors = true;
-    loader.addCompileTimeError(message, charOffset, uri,
-        silent: silent, wasHandled: wasHandled, context: context);
+  void addCompileTimeError(Message message, int charOffset, Uri fileUri,
+      {bool wasHandled: false, LocatedMessage context}) {
+    fileUri ??= this.fileUri;
+    loader.addCompileTimeError(message, charOffset, fileUri,
+        wasHandled: wasHandled, context: context);
   }
 
-  void addWarning(Message message, int charOffset, Uri uri,
-      {bool silent: false, LocatedMessage context}) {
-    if (!silent) {
-      warning(message, charOffset, uri);
-      if (context != null) {
-        report(context, Severity.warning);
-      }
-    }
-  }
-
-  void addError(Message message, int charOffset, Uri uri,
-      {bool silent: false, LocatedMessage context}) {
-    if (!silent) {
-      error(message, charOffset, uri);
-      if (context != null) {
-        report(context, Severity.error);
-      }
-    }
-  }
-
-  void addNit(Message message, int charOffset, Uri uri, {bool silent: false}) {
-    if (!silent) {
-      nit(message, charOffset, uri);
-    }
+  /// Add a problem with a severity determined by the severity of the message.
+  void addProblem(Message message, int charOffset, Uri fileUri,
+      {LocatedMessage context}) {
+    fileUri ??= this.fileUri;
+    loader.addProblem(message, charOffset, fileUri, context: context);
   }
 
   /// Returns true if the export scope was modified.
@@ -145,8 +118,6 @@ abstract class LibraryBuilder<T extends TypeBuilder, R>
       {bool isExport: false, bool isImport: false});
 
   int finishDeferredLoadTearoffs() => 0;
-
-  int finishStaticInvocations() => 0;
 
   int finishNativeMethods() => 0;
 
@@ -200,10 +171,19 @@ abstract class LibraryBuilder<T extends TypeBuilder, R>
 
   int finishTypeVariables(ClassBuilder object) => 0;
 
-  void becomeCoreLibrary(dynamicType, voidType) {
-    addBuilder("dynamic",
-        new DynamicTypeBuilder<T, dynamic>(dynamicType, this, -1), -1);
-    addBuilder("void", new VoidTypeBuilder<T, dynamic>(voidType, this, -1), -1);
+  /// This method instantiates type parameters to their bounds in some cases
+  /// where they were omitted by the programmer and not provided by the type
+  /// inference.  The method returns the number of distinct type variables
+  /// that were instantiated in this library.
+  int instantiateToBound(TypeBuilder dynamicType, ClassBuilder objectClass) {
+    return 0;
+  }
+
+  void becomeCoreLibrary(dynamicType) {
+    if (scope.local["dynamic"] == null) {
+      addBuilder("dynamic",
+          new DynamicTypeBuilder<T, dynamic>(dynamicType, this, -1), -1);
+    }
   }
 
   void forEach(void f(String name, Builder builder)) {
@@ -219,10 +199,9 @@ abstract class LibraryBuilder<T extends TypeBuilder, R>
   Builder operator [](String name) {
     return scope.local[name] ??
         internalProblem(
-            templateInternalProblemNotFoundIn.withArguments(
-                name, relativeFileUri),
+            templateInternalProblemNotFoundIn.withArguments(name, "$fileUri"),
             -1,
-            null);
+            fileUri);
   }
 
   Builder lookup(String name, int charOffset, Uri fileUri) {

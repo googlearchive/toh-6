@@ -15,7 +15,7 @@ import '../problems.dart' show unhandled;
 
 import 'fasta_accessors.dart' show BuilderHelper;
 
-import 'kernel_builder.dart' show LoadLibraryBuilder;
+import 'kernel_builder.dart' show LoadLibraryBuilder, PrefixBuilder;
 
 import 'kernel_shadow_ast.dart'
     show
@@ -669,18 +669,34 @@ class SuperIndexAccessor extends Accessor {
 }
 
 class StaticAccessor extends Accessor {
+  /// The name of the import prefix preceding the [targetClass], [readTarget],
+  /// or [writeTarget], or `null` if the reference is not prefixed.
+  String prefixName;
+
+  /// If [targetClass] is not `null`, the offset at which the explicit
+  /// reference to it is; otherwise `-1`.
+  int targetOffset;
+
+  /// The [Class] that was explicitly referenced to get the [readTarget] or
+  /// the [writeTarget], or `null` if the class is implicit, and targets were
+  /// get from the scope.
+  Class targetClass;
+
   Member readTarget;
   Member writeTarget;
 
-  StaticAccessor(
-      BuilderHelper helper, this.readTarget, this.writeTarget, Token token)
+  StaticAccessor(BuilderHelper helper, this.prefixName, this.targetOffset,
+      this.targetClass, this.readTarget, this.writeTarget, Token token)
       : super(helper, token);
 
   Expression _makeRead(ShadowComplexAssignment complexAssignment) {
     if (readTarget == null) {
       return makeInvalidRead();
     } else {
-      var read = helper.makeStaticGet(readTarget, token);
+      var read = helper.makeStaticGet(readTarget, token,
+          prefixName: prefixName,
+          targetOffset: targetOffset,
+          targetClass: targetClass);
       complexAssignment?.read = read;
       return read;
     }
@@ -720,6 +736,33 @@ abstract class LoadLibraryAccessor extends Accessor {
   }
 }
 
+abstract class DeferredAccessor extends Accessor {
+  final PrefixBuilder builder;
+  final Accessor accessor;
+
+  DeferredAccessor(
+      BuilderHelper helper, Token token, this.builder, this.accessor)
+      : super(helper, token);
+
+  Expression _makeSimpleRead() {
+    return helper.wrapInDeferredCheck(
+        accessor._makeSimpleRead(), builder, token.charOffset);
+  }
+
+  Expression _makeRead(ShadowComplexAssignment complexAssignment) {
+    return helper.wrapInDeferredCheck(
+        accessor._makeRead(complexAssignment), builder, token.charOffset);
+  }
+
+  Expression _makeWrite(Expression value, bool voidContext,
+      ShadowComplexAssignment complexAssignment) {
+    return helper.wrapInDeferredCheck(
+        accessor._makeWrite(value, voidContext, complexAssignment),
+        builder,
+        token.charOffset);
+  }
+}
+
 class ReadOnlyAccessor extends Accessor {
   Expression expression;
   VariableDeclaration value;
@@ -744,6 +787,23 @@ class ReadOnlyAccessor extends Accessor {
   Expression _finish(
           Expression body, ShadowComplexAssignment complexAssignment) =>
       super._finish(makeLet(value, body), complexAssignment);
+}
+
+abstract class DelayedErrorAccessor extends Accessor {
+  DelayedErrorAccessor(BuilderHelper helper, Token token)
+      : super(helper, token);
+
+  Expression buildError();
+
+  Expression _makeSimpleRead() => buildError();
+  Expression _makeSimpleWrite(Expression value, bool voidContext,
+          ShadowComplexAssignment complexAssignment) =>
+      buildError();
+  Expression _makeRead(ShadowComplexAssignment complexAssignment) =>
+      buildError();
+  Expression _makeWrite(Expression value, bool voidContext,
+          ShadowComplexAssignment complexAssignment) =>
+      buildError();
 }
 
 Expression makeLet(VariableDeclaration variable, Expression body) {

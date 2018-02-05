@@ -10,9 +10,7 @@ import 'package:kernel/ast.dart'
         Class,
         ExpressionStatement,
         Field,
-        InvalidExpression,
         InvalidInitializer,
-        InvalidStatement,
         Library,
         Member,
         Procedure,
@@ -49,13 +47,13 @@ class FastaVerifyingVisitor extends VerifyingVisitor
     implements TypeSchemaVisitor {
   final List<LocatedMessage> errors = <LocatedMessage>[];
 
-  String fileUri;
+  Uri fileUri;
 
   FastaVerifyingVisitor(bool isOutline) {
     this.isOutline = isOutline;
   }
 
-  String checkLocation(TreeNode node, String name, String fileUri) {
+  Uri checkLocation(TreeNode node, String name, Uri fileUri) {
     if (name == null || name.contains("#")) {
       // TODO(ahe): Investigate if these checks can be enabled:
       // if (node.fileUri != null && node is! Library) {
@@ -103,8 +101,8 @@ class FastaVerifyingVisitor extends VerifyingVisitor
   problem(TreeNode node, String details, {TreeNode context}) {
     node ??= (context ?? this.context);
     int offset = node?.fileOffset ?? -1;
-    String file = node?.location?.file ?? fileUri;
-    Uri uri = file == null ? null : Uri.parse(file);
+    Uri file = node?.location?.file ?? fileUri;
+    Uri uri = file == null ? null : file;
     LocatedMessage message = templateInternalVerificationError
         .withArguments(details)
         .withLocation(uri, offset);
@@ -151,16 +149,6 @@ class FastaVerifyingVisitor extends VerifyingVisitor
   visitProcedure(Procedure node) {
     fileUri = checkLocation(node, node.name.name, node.fileUri);
     super.visitProcedure(node);
-  }
-
-  @override
-  visitInvalidExpression(InvalidExpression node) {
-    problem(node, "Invalid expression.");
-  }
-
-  @override
-  visitInvalidStatement(InvalidStatement node) {
-    problem(node, "Invalid statement.");
   }
 
   @override

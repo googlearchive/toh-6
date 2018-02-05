@@ -38,6 +38,8 @@ import 'source_library_builder.dart' show SourceLibraryBuilder;
 
 import 'stack_listener.dart' show NullValue, StackListener;
 
+import '../quote.dart' show unescapeString;
+
 class DietListener extends StackListener {
   final SourceLibraryBuilder library;
 
@@ -127,7 +129,7 @@ class DietListener extends StackListener {
   }
 
   @override
-  void handleNoType(Token token) {
+  void handleNoType(Token lastConsumed) {
     debugEvent("NoType");
   }
 
@@ -389,6 +391,13 @@ class DietListener extends StackListener {
     pop(NullValue.Prefix);
 
     Token metadata = pop();
+
+    // Native imports must be skipped because they aren't assigned corresponding
+    // LibraryDependency nodes.
+    Token importUriToken = importKeyword.next;
+    String importUri = unescapeString(importUriToken.lexeme);
+    if (importUri.startsWith("dart-ext:")) return;
+
     Library libraryNode = library.target;
     LibraryDependency dependency =
         libraryNode.dependencies[importExportDirectiveIndex++];
@@ -693,7 +702,7 @@ class DietListener extends StackListener {
       var formals = listener.pop();
       listener.checkEmpty(token.next.charOffset);
       token = parser.parseInitializersOpt(token);
-      token = parser.parseAsyncModifier(token);
+      token = parser.parseAsyncModifierOpt(token);
       AsyncMarker asyncModifier = getAsyncMarker(listener) ?? AsyncMarker.Sync;
       bool isExpression = false;
       bool allowAbstract = asyncModifier == AsyncMarker.Sync;
@@ -784,10 +793,12 @@ class DietListener extends StackListener {
   }
 
   @override
-  void addCompileTimeError(Message message, int offset, int length) {
-    library.addCompileTimeError(message, offset, uri,
-        // We assume this error has already been reported by OutlineBuilder.
-        silent: true);
+  void addCompileTimeError(Message message, int charOffset, int length) {
+    library.addCompileTimeError(message, charOffset, uri);
+  }
+
+  void addProblem(Message message, int charOffset, int length) {
+    library.addProblem(message, charOffset, uri);
   }
 
   @override

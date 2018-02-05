@@ -2,29 +2,12 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-import 'dart:async';
+import 'src/debug_test_builder.dart';
+import 'src/test_bootstrap_builder.dart';
 
-import 'package:build/build.dart';
-import 'package:build_barback/build_barback.dart';
-import 'package:test/pub_serve.dart';
+export 'src/debug_test_builder.dart' show DebugTestBuilder;
+export 'src/test_bootstrap_builder.dart' show TestBootstrapBuilder;
 
-/// A [Builder] that bootstraps
-class TestBootstrapBuilder extends TransformerBuilder {
-  TestBootstrapBuilder()
-      : super(new PubServeTransformer.asPlugin(), {
-          '_test.dart': [
-            '_test.dart.vm_test.dart',
-            '_test.dart.browser_test.dart',
-            '_test.dart.node_test.dart',
-            '_test.html',
-          ]
-        });
+DebugTestBuilder debugTestBuilder(_) => new DebugTestBuilder();
 
-  @override
-  Future<Null> build(BuildStep buildStep) async {
-    if (!buildStep.inputId.path.endsWith('_test.dart')) return;
-    await super.build(buildStep);
-  }
-}
-
-Builder testBootstrapBuilder(_) => new TestBootstrapBuilder();
+TestBootstrapBuilder testBootstrapBuilder(_) => new TestBootstrapBuilder();

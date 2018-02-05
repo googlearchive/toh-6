@@ -35,7 +35,34 @@ bool _isTop(DartType t, {bool dynamicIsBottom: false}) {
   }
   return (t.isDynamic && !dynamicIsBottom) ||
       t.isObject ||
+      t.isVoid ||
       identical(t, UnknownInferredType.instance);
+}
+
+/**
+ * `void`, `dynamic`, and `Object` are all equivalent. However, this makes
+ * LUB/GLB indeterministic. Therefore, for the cases of LUB/GLB, we have some
+ * types which are more top than others.
+ *
+ * So, `void` < `Object` < `dynamic` for the purposes of LUB and GLB.
+ *
+ * This is expressed by their topiness (higher = more toppy).
+ */
+int _getTopiness(DartType t) {
+  assert(_isTop(t), 'only Top types have a topiness');
+
+  // Highest top
+  if (t.isDynamic) return 3;
+  if (t.isObject) return 2;
+  if (t.isVoid) return 1;
+  if (t.isDartAsyncFutureOr)
+    return -3 + _getTopiness((t as InterfaceType).typeArguments[0]);
+  // Lowest top
+
+  assert(false, 'a Top type without a defined topiness');
+
+  // Try to ensure that if this happens, its less toppy than an actual Top type.
+  return -100000;
 }
 
 typedef bool _GuardedSubtypeChecker<T>(T t1, T t2, Set<TypeImpl> visitedTypes);
@@ -148,6 +175,13 @@ class StrongTypeSystemImpl extends TypeSystem {
       return type1;
     }
 
+    // For the purpose of GLB, we say some Tops are subtypes (less toppy) than
+    // the others. Return the least toppy.
+    if (_isTop(type1, dynamicIsBottom: dynamicIsBottom) &&
+        _isTop(type2, dynamicIsBottom: dynamicIsBottom)) {
+      return _getTopiness(type1) < _getTopiness(type2) ? type1 : type2;
+    }
+
     // The GLB of top and any type is just that type.
     // Also GLB of bottom and any type is bottom.
     if (_isTop(type1, dynamicIsBottom: dynamicIsBottom) ||
@@ -156,17 +190,6 @@ class StrongTypeSystemImpl extends TypeSystem {
     }
     if (_isTop(type2, dynamicIsBottom: dynamicIsBottom) ||
         _isBottom(type1, dynamicIsBottom: dynamicIsBottom)) {
-      return type1;
-    }
-
-    // Treat void as top-like for GLB. This only comes into play with the
-    // return types of two functions whose GLB is being taken. We allow a
-    // non-void-returning function to subtype a void-returning one, so match
-    // that logic here by treating the non-void arm as the subtype for GLB.
-    if (type1.isVoid) {
-      return type2;
-    }
-    if (type2.isVoid) {
       return type1;
     }
 
@@ -937,16 +960,6 @@ class StrongTypeSystemImpl extends TypeSystem {
       return false;
     }
 
-    // Void only appears as the return type of a function, and we handle it
-    // directly in the function subtype rules. We should not get to a point
-    // where we're doing a subtype test on a "bare" void, but just in case we
-    // do, handle it safely.
-    // TODO(rnystrom): Determine how this can ever be reached. If it can't,
-    // remove it.
-    if (t1.isVoid || t2.isVoid) {
-      return t1.isVoid && t2.isVoid;
-    }
-
     // We've eliminated void, dynamic, bottom, type parameters, and FutureOr.
     // The only cases are the combinations of interface type and function type.
 
@@ -1163,6 +1176,13 @@ abstract class TypeSystem {
       return type1;
     }
 
+    // For the purpose of LUB, we say some Tops are subtypes (less toppy) than
+    // the others. Return the most toppy.
+    if (_isTop(type1, dynamicIsBottom: dynamicIsBottom) &&
+        _isTop(type2, dynamicIsBottom: dynamicIsBottom)) {
+      return _getTopiness(type1) > _getTopiness(type2) ? type1 : type2;
+    }
+
     // The least upper bound of top and any type T is top.
     // The least upper bound of bottom and any type T is T.
     if (_isTop(type1, dynamicIsBottom: dynamicIsBottom) ||
@@ -1171,13 +1191,6 @@ abstract class TypeSystem {
     }
     if (_isTop(type2, dynamicIsBottom: dynamicIsBottom) ||
         _isBottom(type1, dynamicIsBottom: dynamicIsBottom)) {
-      return type2;
-    }
-    // The least upper bound of void and any type T != dynamic is void.
-    if (type1.isVoid) {
-      return type1;
-    }
-    if (type2.isVoid) {
       return type2;
     }
 

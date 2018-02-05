@@ -10,8 +10,6 @@ import 'package:front_end/src/fasta/export.dart';
 import 'package:front_end/src/fasta/import.dart';
 import 'package:kernel/ast.dart';
 
-import 'package:kernel/clone.dart' show CloneVisitor;
-
 import '../../scanner/token.dart' show Token;
 
 import '../fasta_codes.dart'
@@ -22,7 +20,9 @@ import '../fasta_codes.dart'
         messageTypeVariableSameNameAsEnclosing,
         templateConflictsWithTypeVariable,
         templateDuplicatedExport,
+        templateDuplicatedExportInType,
         templateDuplicatedImport,
+        templateDuplicatedImportInType,
         templateExportHidesExport,
         templateIllegalMethodName,
         templateImportHidesImport,
@@ -44,8 +44,6 @@ import '../source/source_class_builder.dart' show SourceClassBuilder;
 import '../source/source_library_builder.dart'
     show DeclarationBuilder, SourceLibraryBuilder;
 
-import '../util/relativize.dart' show relativizeUri;
-
 import 'kernel_builder.dart'
     show
         AccessErrorBuilder,
@@ -55,6 +53,7 @@ import 'kernel_builder.dart'
         ConstructorReferenceBuilder,
         FormalParameterBuilder,
         InvalidTypeBuilder,
+        KernelClassBuilder,
         KernelConstructorBuilder,
         KernelEnumBuilder,
         KernelFieldBuilder,
@@ -79,10 +78,13 @@ import 'kernel_builder.dart'
         Scope,
         TypeBuilder,
         TypeVariableBuilder,
+        VoidTypeBuilder,
         compareProcedures,
         toKernelCombinators;
 
 import 'metadata_collector.dart';
+
+import 'type_algorithms.dart' show calculateBounds;
 
 class KernelLibraryBuilder
     extends SourceLibraryBuilder<KernelTypeBuilder, Library> {
@@ -92,8 +94,6 @@ class KernelLibraryBuilder
 
   final Map<String, SourceClassBuilder> mixinApplicationClasses =
       <String, SourceClassBuilder>{};
-
-  final List<List> argumentsWithMissingDefaultValues = <List>[];
 
   final List<KernelFunctionBuilder> nativeMethods = <KernelFunctionBuilder>[];
 
@@ -112,8 +112,7 @@ class KernelLibraryBuilder
   Map<String, String> unserializableExports;
 
   KernelLibraryBuilder(Uri uri, Uri fileUri, Loader loader, this.actualOrigin)
-      : library = actualOrigin?.library ??
-            new Library(uri, fileUri: relativizeUri(fileUri)),
+      : library = actualOrigin?.library ?? new Library(uri, fileUri: fileUri),
         super(loader, fileUri);
 
   @override
@@ -136,7 +135,8 @@ class KernelLibraryBuilder
   }
 
   KernelTypeBuilder addVoidType(int charOffset) {
-    return addNamedType("void", null, charOffset);
+    return addNamedType("void", null, charOffset)
+      ..bind(new VoidTypeBuilder(const VoidType(), this, charOffset));
   }
 
   void addClass(
@@ -810,6 +810,21 @@ class KernelLibraryBuilder
     }
   }
 
+  void addNativeDependency(Uri nativeImportUri) {
+    Builder constructor = loader.getNativeAnnotation();
+    Arguments arguments =
+        new Arguments(<Expression>[new StringLiteral("$nativeImportUri")]);
+    Expression annotation;
+    if (constructor.isConstructor) {
+      annotation = new ConstructorInvocation(constructor.target, arguments)
+        ..isConst = true;
+    } else {
+      annotation = new StaticInvocation(constructor.target, arguments)
+        ..isConst = true;
+    }
+    library.addAnnotation(annotation);
+  }
+
   void addDependencies(Library library, Set<KernelLibraryBuilder> seen) {
     if (!seen.add(this)) {
       return;
@@ -826,6 +841,13 @@ class KernelLibraryBuilder
                   exports[exportIndex].charOffset)) {
         // Add import
         Import import = imports[importIndex++];
+
+        // Rather than add a LibraryDependency, we attach an annotation.
+        if (import.nativeImportUri != null) {
+          addNativeDependency(import.nativeImportUri);
+          continue;
+        }
+
         if (import.deferred && import.prefixBuilder?.dependency != null) {
           library.addDependency(import.prefixBuilder.dependency);
         } else {
@@ -846,7 +868,7 @@ class KernelLibraryBuilder
     }
 
     for (KernelLibraryBuilder part in parts) {
-      library.addPart(new LibraryPart(<Expression>[], part.relativeFileUri));
+      library.addPart(new LibraryPart(<Expression>[], part.fileUri));
       part.addDependencies(library, seen);
     }
   }
@@ -925,14 +947,15 @@ class KernelLibraryBuilder
         var template = isExport
             ? templateLocalDefinitionHidesExport
             : templateLocalDefinitionHidesImport;
-        addNit(template.withArguments(name, hiddenUri), charOffset, fileUri);
+        addProblem(
+            template.withArguments(name, hiddenUri), charOffset, fileUri);
       } else if (isLoadLibrary) {
-        addNit(templateLoadLibraryHidesMember.withArguments(preferredUri),
+        addProblem(templateLoadLibraryHidesMember.withArguments(preferredUri),
             charOffset, fileUri);
       } else {
         var template =
             isExport ? templateExportHidesExport : templateImportHidesImport;
-        addNit(template.withArguments(name, preferredUri, hiddenUri),
+        addProblem(template.withArguments(name, preferredUri, hiddenUri),
             charOffset, fileUri);
       }
       return preferred;
@@ -952,8 +975,12 @@ class KernelLibraryBuilder
     var template =
         isExport ? templateDuplicatedExport : templateDuplicatedImport;
     Message message = template.withArguments(name, uri, otherUri);
-    addNit(message, charOffset, fileUri);
-    return new KernelInvalidTypeBuilder(name, charOffset, fileUri, message);
+    addProblem(message, charOffset, fileUri);
+    var builderTemplate = isExport
+        ? templateDuplicatedExportInType
+        : templateDuplicatedImportInType;
+    return new KernelInvalidTypeBuilder(name, charOffset, fileUri,
+        builderTemplate.withArguments(name, uri, otherUri));
   }
 
   int finishDeferredLoadTearoffs() {
@@ -966,45 +993,6 @@ class KernelLibraryBuilder
       }
     }
     return total;
-  }
-
-  int finishStaticInvocations() {
-    CloneVisitor cloner;
-    for (var list in argumentsWithMissingDefaultValues) {
-      final Arguments arguments = list[0];
-      final FunctionNode function = list[1];
-
-      Expression defaultArgumentFrom(Expression expression) {
-        if (expression == null) {
-          return new NullLiteral();
-        }
-        cloner ??= new CloneVisitor();
-        return cloner.clone(expression);
-      }
-
-      for (int i = function.requiredParameterCount;
-          i < function.positionalParameters.length;
-          i++) {
-        arguments.positional[i] ??=
-            defaultArgumentFrom(function.positionalParameters[i].initializer)
-              ..parent = arguments;
-      }
-      Map<String, VariableDeclaration> names;
-      for (NamedExpression expression in arguments.named) {
-        if (expression.value == null) {
-          if (names == null) {
-            names = <String, VariableDeclaration>{};
-            for (VariableDeclaration parameter in function.namedParameters) {
-              names[parameter.name] = parameter;
-            }
-          }
-          expression.value =
-              defaultArgumentFrom(names[expression.name].initializer)
-                ..parent = expression;
-        }
-      }
-    }
-    return argumentsWithMissingDefaultValues.length;
   }
 
   void addNativeMethod(KernelFunctionBuilder method) {
@@ -1046,6 +1034,28 @@ class KernelLibraryBuilder
       builder.finish(this, object);
     }
     boundlessTypeVariables.clear();
+    return count;
+  }
+
+  int instantiateToBound(TypeBuilder dynamicType, ClassBuilder objectClass) {
+    int count = 0;
+
+    for (var declarationBuilder in libraryDeclaration.members.values) {
+      if (declarationBuilder is KernelClassBuilder) {
+        if (declarationBuilder.typeVariables != null) {
+          declarationBuilder.calculatedBounds = calculateBounds(
+              declarationBuilder.typeVariables, dynamicType, objectClass);
+          count += declarationBuilder.calculatedBounds.length;
+        }
+      } else if (declarationBuilder is KernelFunctionTypeAliasBuilder) {
+        if (declarationBuilder.typeVariables != null) {
+          declarationBuilder.calculatedBounds = calculateBounds(
+              declarationBuilder.typeVariables, dynamicType, objectClass);
+          count += declarationBuilder.calculatedBounds.length;
+        }
+      }
+    }
+
     return count;
   }
 

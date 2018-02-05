@@ -11,27 +11,24 @@ import 'flutter.dart' show FlutterTarget;
 import 'vm.dart' show VmTarget;
 import 'vmcc.dart' show VmClosureConvertedTarget;
 import 'vmreify.dart' show VmGenericTypesReifiedTarget;
-import 'implementation_option.dart' show ImplementationOption;
 
 final List<String> targetNames = targets.keys.toList();
 
 class TargetFlags {
-  bool strongMode;
-  bool treeShake;
-  List<ProgramRoot> programRoots;
-  Uri kernelRuntime;
-  final List<ImplementationOption> implementationOptions;
+  final bool strongMode;
+  final bool treeShake;
+
+  /// Whether `async` functions start synchronously.
+  final bool syncAsync;
+  final List<ProgramRoot> programRoots;
+  final Uri kernelRuntime;
 
   TargetFlags(
       {this.strongMode: false,
       this.treeShake: false,
+      this.syncAsync: false,
       this.programRoots: const <ProgramRoot>[],
-      this.kernelRuntime,
-      this.implementationOptions}) {
-    if (implementationOptions != null) {
-      implementationOptions.forEach(ImplementationOption.validate);
-    }
-  }
+      this.kernelRuntime});
 }
 
 typedef Target _TargetBuilder(TargetFlags flags);
@@ -79,8 +76,15 @@ abstract class Target {
   /// promotion do not slow down compilation too much.
   bool get disableTypeInference => false;
 
-  /// If true, the SDK should be loaded in strong mode.
-  bool get strongModeSdk => strongMode;
+  /// Perform target-specific transformations on the outlines stored in
+  /// [Program] when generating summaries.
+  ///
+  /// This transformation is used to add metadata on outlines and to filter
+  /// unnecessary information before generating program summaries. This
+  /// transformation is not applied when compiling full kernel programs to
+  /// prevent affecting the internal invariants of the compiler and accidentally
+  /// slowing down compilation.
+  void performOutlineTransformations(Program program) {}
 
   /// Perform target-specific modular transformations on the given program.
   ///
@@ -139,7 +143,9 @@ abstract class Target {
   bool allowPlatformPrivateLibraryAccess(Uri importer, Uri imported) =>
       imported.scheme != "dart" ||
       !imported.path.startsWith("_") ||
-      importer.scheme == "dart";
+      importer.scheme == "dart" ||
+      (importer.scheme == "package" &&
+          importer.path.startsWith("dart_internal/"));
 
   /// Whether the `native` language extension is supported within [library].
   ///
@@ -177,29 +183,14 @@ abstract class Target {
   /// Builds an expression that throws [error] as compile-time error. The
   /// target must be able to handle this expression in a constant expression.
   Expression throwCompileConstantError(CoreTypes coreTypes, Expression error) {
-    // This method returns `const _ConstantExpressionError()._throw(error)`.
-    int offset = error.fileOffset;
-    var receiver = new ConstructorInvocation(
-        coreTypes.constantExpressionErrorDefaultConstructor,
-        new Arguments.empty()..fileOffset = offset,
-        isConst: true)
-      ..fileOffset = offset;
-    return new MethodInvocation(
-        receiver,
-        new Name("_throw", coreTypes.coreLibrary),
-        new Arguments(<Expression>[error])..fileOffset = error.fileOffset)
-      ..fileOffset = offset;
+    return error;
   }
 
   /// Builds an expression that represents a compile-time error which is
   /// suitable for being passed to [throwCompileConstantError].
   Expression buildCompileTimeError(
       CoreTypes coreTypes, String message, int offset) {
-    return new ConstructorInvocation(
-        coreTypes.compileTimeErrorDefaultConstructor,
-        new Arguments(<Expression>[new StringLiteral(message)])
-          ..fileOffset = offset)
-      ..fileOffset = offset;
+    return new InvalidExpression(message)..fileOffset = offset;
   }
 
   String toString() => 'Target($name)';
@@ -222,7 +213,7 @@ class NoneTarget extends Target {
   @override
   Expression instantiateInvocation(CoreTypes coreTypes, Expression receiver,
       String name, Arguments arguments, int offset, bool isSuper) {
-    return new InvalidExpression();
+    return new InvalidExpression(null);
   }
 
   @override
@@ -238,6 +229,6 @@ class NoneTarget extends Target {
       bool isStatic: false,
       bool isConstructor: false,
       bool isTopLevel: false}) {
-    return new InvalidExpression();
+    return new InvalidExpression(null);
   }
 }

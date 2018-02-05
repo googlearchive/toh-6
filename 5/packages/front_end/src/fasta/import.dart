@@ -12,6 +12,8 @@ import 'kernel/kernel_builder.dart' show toKernelCombinators;
 
 import 'combinator.dart' show Combinator;
 
+import 'configuration.dart' show Configuration;
+
 typedef void AddToScope(String name, Builder member);
 
 class Import {
@@ -29,18 +31,33 @@ class Import {
 
   final List<Combinator> combinators;
 
+  final List<Configuration> configurations;
+
   final int charOffset;
 
   final int prefixCharOffset;
 
-  Import(this.importer, this.imported, this.deferred, this.prefix,
-      this.combinators, this.charOffset, this.prefixCharOffset)
+  // The LibraryBuilder for the imported library ('imported') may be null when
+  // this field is set.
+  final Uri nativeImportUri;
+
+  Import(
+      this.importer,
+      this.imported,
+      this.deferred,
+      this.prefix,
+      this.combinators,
+      this.configurations,
+      this.charOffset,
+      this.prefixCharOffset,
+      {this.nativeImportUri})
       : prefixBuilder = createPrefixBuilder(prefix, importer, imported,
             combinators, deferred, charOffset, prefixCharOffset);
 
   Uri get fileUri => importer.fileUri;
 
   void finalizeImports(LibraryBuilder importer) {
+    if (nativeImportUri != null) return;
     AddToScope add;
     if (prefixBuilder == null) {
       add = (String name, Builder member) {

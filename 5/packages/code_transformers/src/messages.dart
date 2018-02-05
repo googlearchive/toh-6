@@ -10,8 +10,7 @@ import 'package:code_transformers/messages/messages.dart';
 const NO_ABSOLUTE_PATHS = const MessageTemplate(
     const MessageId('code_transformers', 1),
     'absolute paths not allowed: "%-url-%"',
-    'Absolute paths not allowed',
-    '''
+    'Absolute paths not allowed', '''
 The transformers processing your code were trying to resolve a URL and identify
 a file that they correspond to. Currently only relative paths can be resolved.
 ''');
@@ -55,8 +54,7 @@ See [issue 15797](http://dartbug.com/15797) and
 const UNSPECIFIED_FROM_IN_NON_LIB_ASSET = const MessageTemplate(
     const MessageId('code_transformers', 4),
     'Cannot create URI for %-id-% without specifying where to import it from.',
-    'Missing `from` argument.',
-    '''
+    'Missing `from` argument.', '''
 Assets outside of the lib folder can only be imported via relative URIs. Use
 the `from` argument in `assetIdToUri` to specify the location in the same
 package where you intend to import this asset from.
@@ -65,8 +63,7 @@ package where you intend to import this asset from.
 const IMPORT_FROM_DIFFERENT_PACKAGE = const MessageTemplate(
     const MessageId('code_transformers', 5),
     'Not possible to import %-toId-% from %-fromId-%',
-    'Cannot import asset.',
-    '''
+    'Cannot import asset.', '''
 Assets outside of the lib folder can only be imported via relative URIs from
 assets in the same package. To import an asset from another package, you need to
 move it into the lib folder of your package.

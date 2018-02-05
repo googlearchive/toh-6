@@ -13,7 +13,6 @@ import 'package:glob/glob.dart';
 import 'package:meta/meta.dart';
 import 'package:watcher/watcher.dart';
 
-import '../asset/reader.dart';
 import '../generate/phase.dart';
 import '../package_graph/package_graph.dart';
 import 'exceptions.dart';
@@ -23,6 +22,13 @@ part 'serialization.dart';
 
 /// All the [AssetId]s involved in a build, and all of their outputs.
 class AssetGraph {
+  /// A map of phase number to primary inputs that failed during that phase.
+  ///
+  /// See [markActionFailed] and [markActionSucceeded] for more info.
+  final Map<int, Set<AssetId>> _failedActions;
+  UnmodifiableMapView<int, Iterable<AssetId>> get failedActions =>
+      new UnmodifiableMapView(_failedActions);
+
   /// All the [AssetNode]s in the graph, indexed by package and then path.
   final _nodesByPackage = <String, Map<String, AssetNode>>{};
 
@@ -32,10 +38,11 @@ class AssetGraph {
   /// the new [BuildAction]s and throw away the graph if it doesn't.
   final Digest buildActionsDigest;
 
-  AssetGraph._(this.buildActionsDigest);
+  AssetGraph._(this.buildActionsDigest, {Map<int, Set<AssetId>> failedActions})
+      : _failedActions = failedActions ?? new Map<int, Set<AssetId>>();
 
   /// Deserializes this graph.
-  factory AssetGraph.deserialize(Map serializedGraph) =>
+  factory AssetGraph.deserialize(List<int> serializedGraph) =>
       new _AssetGraphDeserializer(serializedGraph).deserialize();
 
   static Future<AssetGraph> build(
@@ -43,7 +50,7 @@ class AssetGraph {
       Set<AssetId> sources,
       Set<AssetId> internalSources,
       PackageGraph packageGraph,
-      DigestAssetReader digestReader) async {
+      AssetReader digestReader) async {
     var graph = new AssetGraph._(computeBuildActionsDigest(buildActions));
     var placeholders = graph._addPlaceHolderNodes(packageGraph);
     var sourceNodes = graph._addSources(sources);
@@ -59,8 +66,7 @@ class AssetGraph {
     return graph;
   }
 
-  Map<String, dynamic> serialize() =>
-      new _AssetGraphSerializer(this).serialize();
+  List<int> serialize() => new _AssetGraphSerializer(this).serialize();
 
   /// Checks if [id] exists in the graph.
   bool contains(AssetId id) =>
@@ -71,6 +77,24 @@ class AssetGraph {
     var pkg = _nodesByPackage[id?.package];
     if (pkg == null) return null;
     return pkg[id.path];
+  }
+
+  /// Marks an action in [phaseNumber] with [primaryInputId] as having failed.
+  void markActionFailed(int phaseNumber, AssetId primaryInputId) {
+    _failedActions
+        .putIfAbsent(phaseNumber, () => new Set<AssetId>())
+        .add(primaryInputId);
+  }
+
+  /// Marks an action in [phaseNumber] with [primaryInputId] as having
+  /// succeeded.
+  void markActionSucceeded(int phaseNumber, AssetId primaryInputId) {
+    var phaseSet = _failedActions[phaseNumber];
+    if (phaseSet == null) return;
+    phaseSet.remove(primaryInputId);
+    if (phaseSet.isEmpty) {
+      _failedActions.remove(phaseNumber);
+    }
   }
 
   /// Adds [node] to the graph if it doesn't exist.
@@ -135,7 +159,7 @@ class AssetGraph {
   /// Uses [digestReader] to compute the [Digest] for [nodes] and set the
   /// `lastKnownDigest` field.
   Future<Null> _setLastKnownDigests(
-      Iterable<AssetNode> nodes, DigestAssetReader digestReader) async {
+      Iterable<AssetNode> nodes, AssetReader digestReader) async {
     await Future.wait(nodes.map((node) async {
       node.lastKnownDigest = await digestReader.digest(node.id);
     }));
@@ -169,6 +193,7 @@ class AssetGraph {
       }
       var builderOptionsNode = get(node.builderOptionsId);
       builderOptionsNode.outputs.remove(id);
+      markActionSucceeded(node.phaseNumber, node.primaryInput);
     }
     _nodesByPackage[id.package].remove(id.path);
     return removedIds;
@@ -199,7 +224,7 @@ class AssetGraph {
       Map<AssetId, ChangeType> updates,
       String rootPackage,
       Future delete(AssetId id),
-      DigestAssetReader digestReader) async {
+      AssetReader digestReader) async {
     var invalidatedIds = new Set<AssetId>();
 
     // Transitively invalidates all assets.
@@ -243,8 +268,9 @@ class AssetGraph {
     // Pre-emptively compute digests for the new and modified nodes we know have
     // outputs.
     await _setLastKnownDigests(
-        newAndModifiedNodes
-            .where((node) => node.isValidInput && node.outputs.isNotEmpty),
+        newAndModifiedNodes.where((node) =>
+            node.isValidInput &&
+            (node.outputs.isNotEmpty || node.lastKnownDigest != null)),
         digestReader);
 
     // Collects the set of all transitive ids to be removed from the graph,
@@ -316,7 +342,7 @@ class AssetGraph {
     if (placeholders != null) allInputs.addAll(placeholders);
 
     for (var phase = 0; phase < buildActions.length; phase++) {
-      var phaseOutputs = <AssetId>[];
+      var phaseOutputs = new Set<AssetId>();
       var action = buildActions[phase];
       var buildOptionsNodeId = builderOptionsIdForPhase(action.package, phase);
       var builderOptionsNode =
@@ -326,15 +352,23 @@ class AssetGraph {
         // We might have deleted some inputs during this loop, if they turned
         // out to be generated assets.
         if (!allInputs.contains(input)) continue;
+        var node = get(input);
+        if (!action.hideOutput && node is GeneratedAssetNode && node.isHidden) {
+          continue;
+        }
+        assert(node != null, 'The node from `$input` does not exist.');
 
         var outputs = expectedOutputs(action.builder, input);
         phaseOutputs.addAll(outputs);
-        var node = get(input);
         node.primaryOutputs.addAll(outputs);
         node.outputs.addAll(outputs);
-        allInputs.removeAll(_addGeneratedOutputs(
-            outputs, phase, builderOptionsNode,
-            primaryInput: input, isHidden: action.hideOutput));
+        var deleted = _addGeneratedOutputs(outputs, phase, builderOptionsNode,
+            primaryInput: input, isHidden: action.hideOutput);
+        allInputs.removeAll(deleted);
+        // We may delete source nodes that were producing outputs previously.
+        // Detect this by checking for deleted nodes that no longer exist in the
+        // graph at all, and remove them from `phaseOutputs`.
+        phaseOutputs.removeAll(deleted.where((id) => !contains(id)));
       }
       allInputs.addAll(phaseOutputs);
     }

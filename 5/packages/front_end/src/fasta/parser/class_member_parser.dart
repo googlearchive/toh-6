@@ -6,8 +6,6 @@ library fasta.parser.class_member_parser;
 
 import '../../scanner/token.dart' show Token;
 
-import '../fasta_codes.dart' show Message;
-
 import 'assert.dart' show Assert;
 
 import 'listener.dart' show Listener;
@@ -21,9 +19,7 @@ class ClassMemberParser extends Parser {
 
   @override
   Token parseExpression(Token token) {
-    // TODO(brianwilkerson): Remove the invocation of `syntheticPreviousToken`
-    // when `parseExpression` accepts the last consumed token.
-    return skipExpression(syntheticPreviousToken(token));
+    return skipExpression(token);
   }
 
   @override
@@ -38,16 +34,6 @@ class ClassMemberParser extends Parser {
     } else {
       return skipExpression(token);
     }
-  }
-
-  @override
-  Token parseRecoverExpression(Token token, Message message) {
-    Token begin = token;
-    // TODO(brianwilkerson): Remove the invocation of `syntheticPreviousToken`
-    // when `parseRecoverExpression` accepts the last consumed token.
-    token = skipExpression(syntheticPreviousToken(token));
-    listener.handleRecoverExpression(begin, message);
-    return token;
   }
 
   // This method is overridden for two reasons:

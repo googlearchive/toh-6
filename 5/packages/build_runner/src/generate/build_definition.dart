@@ -3,7 +3,6 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:build/build.dart';
@@ -12,7 +11,6 @@ import 'package:logging/logging.dart';
 import 'package:watcher/watcher.dart';
 
 import '../asset/build_cache.dart';
-import '../asset/reader.dart';
 import '../asset/writer.dart';
 import '../asset_graph/exceptions.dart';
 import '../asset_graph/graph.dart';
@@ -31,7 +29,7 @@ final _logger = new Logger('BuildDefinition');
 class BuildDefinition {
   final AssetGraph assetGraph;
 
-  final DigestAssetReader reader;
+  final AssetReader reader;
   final RunnerAssetWriter writer;
 
   final PackageGraph packageGraph;
@@ -76,11 +74,11 @@ class _Loader {
     _checkBuildActions();
 
     _logger.info('Initializing inputs');
+
+    var assetGraph = await _tryReadCachedAssetGraph();
     var inputSources = await _findInputSources();
     var cacheDirSources = await _findCacheDirSources();
     var internalSources = await _findInternalSources();
-
-    var assetGraph = await _tryReadCachedAssetGraph();
 
     BuildScriptUpdates buildScriptUpdates;
     if (assetGraph != null) {
@@ -95,7 +93,8 @@ class _Loader {
       if (!_options.skipBuildScriptCheck &&
           buildScriptUpdates.hasBeenUpdated(updates.keys.toSet())) {
         _logger.warning('Invalidating asset graph due to build script update');
-        await _deleteGeneratedDir();
+        var deletedSourceOutputs = await _cleanupOldOutputs(assetGraph);
+        inputSources.removeAll(deletedSourceOutputs);
         assetGraph = null;
         buildScriptUpdates = null;
       }
@@ -186,16 +185,15 @@ class _Loader {
     return logTimedAsync(_logger, 'Reading cached asset graph', () async {
       try {
         var cachedGraph = new AssetGraph.deserialize(
-            JSON.decode(await _environment.reader.readAsString(assetGraphId))
-                as Map);
+            await _environment.reader.readAsBytes(assetGraphId));
         if (computeBuildActionsDigest(_buildActions) !=
             cachedGraph.buildActionsDigest) {
           _logger.warning(
               'Throwing away cached asset graph because the build actions have '
-              'changed. This could happen as a result of adding a new '
-              'dependency, or if you are using a build script which changes '
-              'the build structure based on command line flags or other '
-              'configuration.');
+              'changed. This most commonly would happen as a result of adding a '
+              'new dependency or updating your dependencies.');
+
+          await _cleanupOldOutputs(cachedGraph);
           return null;
         }
         return cachedGraph;
@@ -208,6 +206,26 @@ class _Loader {
         return null;
       }
     });
+  }
+
+  /// Deletes all the old outputs from [graph] that were written to the source
+  /// tree, and deletes the entire generated directory.
+  Future<Iterable<AssetId>> _cleanupOldOutputs(AssetGraph graph) async {
+    var deletedSources = <AssetId>[];
+    await logTimedAsync(_logger, 'Cleaning up outputs from previous builds.',
+        () async {
+      // Delete all the non-hidden outputs.
+      await Future.wait(graph.outputs.map((id) {
+        var node = graph.get(id) as GeneratedAssetNode;
+        if (node.wasOutput && !node.isHidden) {
+          deletedSources.add(id);
+          return _environment.writer.delete(id);
+        }
+      }).where((v) => v is Future));
+
+      await _deleteGeneratedDir();
+    });
+    return deletedSources;
   }
 
   /// Updates [assetGraph] based on a the new view of the world.
@@ -241,8 +259,7 @@ class _Loader {
   }
 
   /// Wraps [original] in a [BuildCacheReader].
-  DigestAssetReader _wrapReader(
-      DigestAssetReader original, AssetGraph assetGraph) {
+  AssetReader _wrapReader(AssetReader original, AssetGraph assetGraph) {
     assert(assetGraph != null);
     return new BuildCacheReader(
         original, assetGraph, _options.packageGraph.root.name);
@@ -337,7 +354,7 @@ class _Loader {
   List<String> _packageIncludes(PackageNode package) => package.isRoot
       ? _options.rootPackageFilesWhitelist
       : package.name == r'$sdk'
-          ? const ['lib/dev_compiler/**.js']
+          ? const ['lib/dev_compiler/**.js', 'lib/_internal/**.sum']
           : const ['lib/**'];
 
   Stream<AssetId> _listGeneratedAssetIds() async* {
@@ -345,6 +362,7 @@ class _Loader {
     await for (var id in _environment.reader.findAssets(glob)) {
       var packagePath = id.path.substring(generatedOutputDirectory.length + 1);
       var firstSlash = packagePath.indexOf('/');
+      if (firstSlash == -1) continue;
       var package = packagePath.substring(0, firstSlash);
       var path = packagePath.substring(firstSlash + 1);
       yield new AssetId(package, path);

@@ -4,13 +4,18 @@
 
 library fasta.fasta_accessors;
 
-import 'package:kernel/ast.dart'
-    hide InvalidExpression, InvalidInitializer, InvalidStatement;
+import 'package:kernel/ast.dart' hide InvalidExpression, InvalidInitializer;
 
 import '../../scanner/token.dart' show Token;
 
 import '../fasta_codes.dart'
-    show messageInvalidInitializer, messageLoadLibraryTakesNoArguments;
+    show
+        messageInvalidInitializer,
+        messageLoadLibraryTakesNoArguments,
+        messageSuperAsExpression,
+        templateDeferredTypeAnnotation,
+        templateIntegerLiteralIsOutOfRange,
+        templateNotAType;
 
 import '../messages.dart' show Message;
 
@@ -29,6 +34,8 @@ import 'frontend_accessors.dart' as kernel
         LoadLibraryAccessor,
         PropertyAccessor,
         ReadOnlyAccessor,
+        DeferredAccessor,
+        DelayedErrorAccessor,
         StaticAccessor,
         SuperIndexAccessor,
         SuperPropertyAccessor,
@@ -43,11 +50,15 @@ import 'kernel_builder.dart'
         Builder,
         FunctionTypeAliasBuilder,
         KernelClassBuilder,
+        KernelFunctionTypeAliasBuilder,
         KernelInvalidTypeBuilder,
+        KernelLibraryBuilder,
+        KernelTypeVariableBuilder,
         LibraryBuilder,
         LoadLibraryBuilder,
         PrefixBuilder,
-        TypeDeclarationBuilder;
+        TypeDeclarationBuilder,
+        KernelTypeBuilder;
 
 import 'kernel_shadow_ast.dart'
     show
@@ -61,9 +72,9 @@ import 'kernel_shadow_ast.dart'
         ShadowTypeLiteral,
         ShadowVariableAssignment;
 
-import 'kernel_type_variable_builder.dart' show KernelTypeVariableBuilder;
-
 import 'utils.dart' show offsetForToken;
+
+import 'type_algorithms.dart' show calculateBoundsForDeclaration;
 
 abstract class BuilderHelper {
   LibraryBuilder get library;
@@ -89,6 +100,8 @@ abstract class BuilderHelper {
 
   Expression buildCompileTimeError(Message message, int charOffset);
 
+  Expression wrapInCompileTimeError(Expression expression, Message message);
+
   Expression deprecated_buildCompileTimeError(String error, [int offset]);
 
   Initializer buildInvalidInitializer(Expression expression, [int offset]);
@@ -105,7 +118,12 @@ abstract class BuilderHelper {
       [int charOffset = -1]);
 
   Expression buildStaticInvocation(Procedure target, Arguments arguments,
-      {bool isConst, int charOffset, Member initialTarget});
+      {bool isConst,
+      int charOffset,
+      Member initialTarget,
+      String prefixName,
+      int targetOffset: -1,
+      Class targetClass});
 
   Expression buildProblemExpression(ProblemBuilder builder, int offset);
 
@@ -120,10 +138,13 @@ abstract class BuilderHelper {
   bool checkArguments(FunctionNode function, Arguments arguments,
       List<TypeParameter> typeParameters);
 
-  StaticGet makeStaticGet(Member readTarget, Token token);
+  StaticGet makeStaticGet(Member readTarget, Token token,
+      {String prefixName, int targetOffset: -1, Class targetClass});
 
-  dynamic deprecated_addCompileTimeError(int charOffset, String message,
-      {bool silent});
+  Expression wrapInDeferredCheck(
+      Expression expression, PrefixBuilder prefix, int charOffset);
+
+  dynamic deprecated_addCompileTimeError(int charOffset, String message);
 
   bool isIdentical(Member member);
 
@@ -135,10 +156,21 @@ abstract class BuilderHelper {
       bool isSuper,
       Member interfaceTarget});
 
+  Expression buildConstructorInvocation(
+      TypeDeclarationBuilder type,
+      Token nameToken,
+      Arguments arguments,
+      String name,
+      List<DartType> typeArguments,
+      int charOffset,
+      bool isConst);
+
   DartType validatedTypeVariableUse(
       TypeParameterType type, int offset, bool nonInstanceAccessIsError);
 
-  void warning(Message message, int offset, int length);
+  void addProblem(Message message, int charOffset);
+
+  void addProblemErrorIfConst(Message message, int charOffset, int length);
 
   Message warnUnresolvedGet(Name name, int charOffset, {bool isSuper});
 
@@ -200,6 +232,13 @@ abstract class FastaAccessor implements Accessor {
       return PropertyAccessor.make(helper, send.token, buildSimpleRead(),
           send.name, null, null, isNullAware);
     }
+  }
+
+  DartType buildTypeWithBuiltArguments(List<DartType> arguments,
+      {bool nonInstanceAccessIsError: false}) {
+    helper.addProblem(
+        templateNotAType.withArguments(token.lexeme), token.charOffset);
+    return const InvalidType();
   }
 
   /* Expression | FastaAccessor */ buildThrowNoSuchMethodError(
@@ -341,8 +380,8 @@ class ThisAccessor extends FastaAccessor {
     if (!isSuper) {
       return new ShadowThisExpression();
     } else {
-      return helper.deprecated_buildCompileTimeError(
-          "Can't use `super` as an expression.", offsetForToken(token));
+      return helper.buildCompileTimeError(
+          messageSuperAsExpression, offsetForToken(token));
     }
   }
 
@@ -395,6 +434,8 @@ class ThisAccessor extends FastaAccessor {
   doInvocation(int offset, Arguments arguments) {
     if (isInitializer) {
       return buildConstructorInitializer(offset, new Name(""), arguments);
+    } else if (isSuper) {
+      return helper.buildCompileTimeError(messageSuperAsExpression, offset);
     } else {
       return helper.buildMethodInvocation(
           new ShadowThisExpression(), callName, arguments, offset,
@@ -659,7 +700,7 @@ class IndexAccessor extends kernel.IndexAccessor with FastaAccessor {
 
   Expression doInvocation(int offset, Arguments arguments) {
     return helper.buildMethodInvocation(
-        buildSimpleRead(), callName, arguments, offset,
+        buildSimpleRead(), callName, arguments, arguments.fileOffset,
         isImplicitCall: true);
   }
 
@@ -728,13 +769,16 @@ class PropertyAccessor extends kernel.PropertyAccessor with FastaAccessor {
 
 class StaticAccessor extends kernel.StaticAccessor with FastaAccessor {
   StaticAccessor(
-      BuilderHelper helper, Token token, Member readTarget, Member writeTarget)
-      : super(helper, readTarget, writeTarget, token) {
+      BuilderHelper helper, Token token, Member readTarget, Member writeTarget,
+      {String prefixName, int targetOffset: -1, Class targetClass})
+      : super(helper, prefixName, targetOffset, targetClass, readTarget,
+            writeTarget, token) {
     assert(readTarget != null || writeTarget != null);
   }
 
-  factory StaticAccessor.fromBuilder(BuilderHelper helper, Builder builder,
-      Token token, Builder builderSetter) {
+  factory StaticAccessor.fromBuilder(
+      BuilderHelper helper, Builder builder, Token token, Builder builderSetter,
+      {PrefixBuilder prefix, int targetOffset: -1, Class targetClass}) {
     if (builder is AccessErrorBuilder) {
       AccessErrorBuilder error = builder;
       builder = error.builder;
@@ -752,7 +796,10 @@ class StaticAccessor extends kernel.StaticAccessor with FastaAccessor {
         setter = builderSetter.target;
       }
     }
-    return new StaticAccessor(helper, token, getter, setter);
+    return new StaticAccessor(helper, token, getter, setter,
+        prefixName: prefix?.name,
+        targetOffset: targetOffset,
+        targetClass: targetClass);
   }
 
   String get plainNameForRead => (readTarget ?? writeTarget).name.name;
@@ -771,7 +818,10 @@ class StaticAccessor extends kernel.StaticAccessor with FastaAccessor {
           isImplicitCall: true);
     } else {
       return helper.buildStaticInvocation(readTarget, arguments,
-          charOffset: offset);
+          charOffset: offset,
+          prefixName: prefixName,
+          targetOffset: targetOffset,
+          targetClass: targetClass);
     }
   }
 
@@ -779,7 +829,7 @@ class StaticAccessor extends kernel.StaticAccessor with FastaAccessor {
 
   @override
   ShadowComplexAssignment startComplexAssignment(Expression rhs) =>
-      new ShadowStaticAssignment(rhs);
+      new ShadowStaticAssignment(prefixName, targetOffset, targetClass, rhs);
 }
 
 class LoadLibraryAccessor extends kernel.LoadLibraryAccessor
@@ -792,10 +842,52 @@ class LoadLibraryAccessor extends kernel.LoadLibraryAccessor
 
   Expression doInvocation(int offset, Arguments arguments) {
     if (arguments.positional.length > 0 || arguments.named.length > 0) {
-      helper.warning(
+      helper.addProblemErrorIfConst(
           messageLoadLibraryTakesNoArguments, offset, 'loadLibrary'.length);
     }
     return builder.createLoadLibrary(offset);
+  }
+}
+
+class DeferredAccessor extends kernel.DeferredAccessor with FastaAccessor {
+  DeferredAccessor(BuilderHelper helper, Token token, PrefixBuilder builder,
+      FastaAccessor expression)
+      : super(helper, token, builder, expression);
+
+  String get plainNameForRead {
+    return unsupported(
+        "deferredAccessor.plainNameForRead", offsetForToken(token), uri);
+  }
+
+  FastaAccessor get accessor => super.accessor;
+
+  buildPropertyAccess(
+      IncompleteSend send, int operatorOffset, bool isNullAware) {
+    var propertyAccess =
+        accessor.buildPropertyAccess(send, operatorOffset, isNullAware);
+    if (propertyAccess is FastaAccessor) {
+      return new DeferredAccessor(helper, token, builder, propertyAccess);
+    } else {
+      Expression expression = propertyAccess;
+      return helper.wrapInDeferredCheck(expression, builder, token.charOffset);
+    }
+  }
+
+  @override
+  DartType buildTypeWithBuiltArguments(List<DartType> arguments,
+      {bool nonInstanceAccessIsError: false}) {
+    helper.addProblem(
+        templateDeferredTypeAnnotation.withArguments(
+            accessor.buildTypeWithBuiltArguments(arguments,
+                nonInstanceAccessIsError: nonInstanceAccessIsError),
+            builder.name),
+        token.charOffset);
+    return const InvalidType();
+  }
+
+  Expression doInvocation(int offset, Arguments arguments) {
+    return helper.wrapInDeferredCheck(
+        accessor.doInvocation(offset, arguments), builder, token.charOffset);
   }
 }
 
@@ -973,6 +1065,18 @@ class ReadOnlyAccessor extends kernel.ReadOnlyAccessor with FastaAccessor {
   }
 }
 
+class LargeIntAccessor extends kernel.DelayedErrorAccessor with FastaAccessor {
+  final String plainNameForRead = null;
+
+  LargeIntAccessor(BuilderHelper helper, Token token) : super(helper, token);
+
+  Expression buildError() => helper.buildCompileTimeError(
+      templateIntegerLiteralIsOutOfRange.withArguments(token),
+      token.charOffset);
+
+  Expression doInvocation(int offset, Arguments arguments) => buildError();
+}
+
 class ParenthesizedExpression extends ReadOnlyAccessor {
   ParenthesizedExpression(
       BuilderHelper helper, Expression expression, Token token)
@@ -985,10 +1089,23 @@ class ParenthesizedExpression extends ReadOnlyAccessor {
 }
 
 class TypeDeclarationAccessor extends ReadOnlyAccessor {
+  /// The import prefix preceding the [declaration] reference, or `null` if
+  /// the reference is not prefixed.
+  final PrefixBuilder prefix;
+
+  /// The offset at which the [declaration] is referenced by this accessor,
+  /// or `-1` if the reference is implicit.
+  final int declarationReferenceOffset;
+
   final TypeDeclarationBuilder declaration;
 
-  TypeDeclarationAccessor(BuilderHelper helper, this.declaration,
-      String plainNameForRead, Token token)
+  TypeDeclarationAccessor(
+      BuilderHelper helper,
+      this.prefix,
+      this.declarationReferenceOffset,
+      this.declaration,
+      String plainNameForRead,
+      Token token)
       : super(helper, null, plainNameForRead, token);
 
   Expression get expression {
@@ -996,16 +1113,15 @@ class TypeDeclarationAccessor extends ReadOnlyAccessor {
       int offset = offsetForToken(token);
       if (declaration is KernelInvalidTypeBuilder) {
         KernelInvalidTypeBuilder declaration = this.declaration;
-        helper.library.addWarning(
-            declaration.message, declaration.charOffset, declaration.fileUri);
-        helper.warning(declaration.message, offset, token.length);
+        helper.addProblemErrorIfConst(
+            declaration.message.messageObject, offset, token.length);
         super.expression = new Throw(
             new StringLiteral(declaration.message.message)
               ..fileOffset = offsetForToken(token))
           ..fileOffset = offset;
       } else {
-        super.expression = new ShadowTypeLiteral(
-            buildType(null, nonInstanceAccessIsError: true))
+        super.expression = new ShadowTypeLiteral(prefix?.name,
+            buildTypeWithBuiltArguments(null, nonInstanceAccessIsError: true))
           ..fileOffset = offsetForToken(token);
       }
     }
@@ -1036,9 +1152,19 @@ class TypeDeclarationAccessor extends ReadOnlyAccessor {
 
       FastaAccessor accessor;
       if (builder == null) {
-        // If we find a setter, [builder] is an
-        // [AccessErrorBuilder], not null.
-        accessor = new UnresolvedAccessor(helper, name, send.token);
+        // If we find a setter, [builder] is an [AccessErrorBuilder], not null.
+        if (send is IncompletePropertyAccessor) {
+          accessor = new UnresolvedAccessor(helper, name, send.token);
+        } else {
+          return helper.buildConstructorInvocation(
+              declaration,
+              send.token,
+              arguments,
+              name.name,
+              null,
+              token.charOffset,
+              helper.constantExpressionRequired);
+        }
       } else {
         Builder setter;
         if (builder.isSetter) {
@@ -1050,8 +1176,11 @@ class TypeDeclarationAccessor extends ReadOnlyAccessor {
         } else if (builder.isField && !builder.isFinal) {
           setter = builder;
         }
-        accessor =
-            new StaticAccessor.fromBuilder(helper, builder, send.token, setter);
+        accessor = new StaticAccessor.fromBuilder(
+            helper, builder, send.token, setter,
+            prefix: prefix,
+            targetOffset: declarationReferenceOffset,
+            targetClass: declaration.target);
       }
 
       return arguments == null
@@ -1062,7 +1191,8 @@ class TypeDeclarationAccessor extends ReadOnlyAccessor {
     }
   }
 
-  DartType buildType(List<DartType> arguments,
+  @override
+  DartType buildTypeWithBuiltArguments(List<DartType> arguments,
       {bool nonInstanceAccessIsError: false}) {
     if (arguments != null) {
       int expected = 0;
@@ -1089,13 +1219,79 @@ class TypeDeclarationAccessor extends ReadOnlyAccessor {
         arguments = null;
       }
     }
-    DartType type =
-        declaration.buildTypesWithBuiltArguments(helper.library, arguments);
+
+    DartType type;
+    LibraryBuilder helperLibrary = helper.library;
+    if (arguments == null &&
+        helperLibrary is KernelLibraryBuilder &&
+        helperLibrary.loader.target.strongMode) {
+      TypeDeclarationBuilder typeDeclaration = declaration;
+      if (typeDeclaration is KernelClassBuilder) {
+        typeDeclaration.calculatedBounds ??= calculateBoundsForDeclaration(
+            typeDeclaration,
+            helperLibrary.loader.target.dynamicType,
+            helperLibrary.loader.coreLibrary["Object"]);
+        type = typeDeclaration.buildType(
+            helper.library, typeDeclaration.calculatedBounds);
+      } else if (typeDeclaration is KernelFunctionTypeAliasBuilder) {
+        typeDeclaration.calculatedBounds ??= calculateBoundsForDeclaration(
+            typeDeclaration,
+            helperLibrary.loader.target.dynamicType,
+            helperLibrary.loader.coreLibrary["Object"]);
+        type = typeDeclaration.buildType(
+            helper.library, typeDeclaration.calculatedBounds);
+      }
+    }
+    if (type == null) {
+      type =
+          declaration.buildTypesWithBuiltArguments(helper.library, arguments);
+    }
     if (type is TypeParameterType) {
       return helper.validatedTypeVariableUse(
           type, offsetForToken(token), nonInstanceAccessIsError);
     }
     return type;
+  }
+
+  DartType buildType(List<KernelTypeBuilder> arguments,
+      {bool nonInstanceAccessIsError: false}) {
+    if (arguments != null) {
+      int expected = 0;
+      if (declaration is KernelClassBuilder) {
+        expected = declaration.target.typeParameters.length;
+      } else if (declaration is FunctionTypeAliasBuilder) {
+        expected = declaration.target.typeParameters.length;
+      } else if (declaration is KernelTypeVariableBuilder) {
+        // Type arguments on a type variable - error reported elsewhere.
+      } else {
+        return unhandled(
+            "${declaration.runtimeType}",
+            "TypeDeclarationAccessor.buildType",
+            offsetForToken(token),
+            helper.uri);
+      }
+      if (arguments.length != expected) {
+        helper.warnTypeArgumentsMismatch(
+            declaration.name, expected, offsetForToken(token));
+        // We ignore the provided arguments, which will in turn return the
+        // raw type below.
+        // TODO(sigmund): change to use an InvalidType and include the raw type
+        // as a recovery node once the IR can represent it (Issue #29840).
+        arguments = null;
+      }
+    }
+    DartType type = declaration.buildType(helper.library, arguments);
+    if (type is TypeParameterType) {
+      return helper.validatedTypeVariableUse(
+          type, offsetForToken(token), nonInstanceAccessIsError);
+    }
+    return type;
+  }
+
+  @override
+  Expression doInvocation(int offset, Arguments arguments) {
+    return helper.buildConstructorInvocation(declaration, token, arguments, "",
+        null, token.charOffset, helper.constantExpressionRequired);
   }
 }
 

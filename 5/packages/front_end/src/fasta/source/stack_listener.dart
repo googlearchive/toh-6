@@ -14,8 +14,6 @@ import '../fasta_codes.dart'
         messageNativeClauseShouldBeAnnotation,
         templateInternalProblemStackNotEmpty;
 
-import '../messages.dart' as messages;
-
 import '../parser.dart' show Listener, MemberKind;
 
 import '../parser/identifier_context.dart' show IdentifierContext;
@@ -36,6 +34,7 @@ enum NullValue {
   Combinators,
   Comments,
   ConditionalUris,
+  ConditionallySelectedImport,
   ConstructorInitializerSeparator,
   ConstructorInitializers,
   ConstructorReferenceContinuationAfterTypeArguments,
@@ -225,7 +224,7 @@ abstract class StackListener extends Listener {
   }
 
   @override
-  void handleNoType(Token token) {
+  void handleNoType(Token lastConsumed) {
     debugEvent("NoType");
     push(NullValue.Type);
   }
@@ -307,8 +306,8 @@ abstract class StackListener extends Listener {
   }
 
   @override
-  void handleRecoverExpression(Token token, Message message) {
-    debugEvent("RecoverExpression");
+  void handleDirectivesOnly() {
+    pop(); // Discard the metadata.
   }
 
   void handleExtraneousExpression(Token token, Message message) {
@@ -338,20 +337,12 @@ abstract class StackListener extends Listener {
     addCompileTimeError(message, offset, endToken.end - offset);
   }
 
-  void addCompileTimeError(Message message, int offset, int length);
-
   @override
   Token handleUnrecoverableError(Token token, Message message) {
     throw deprecated_inputError(uri, token.charOffset, message.message);
   }
 
-  void nit(Message message, int charOffset) {
-    messages.nit(message, charOffset, uri);
-  }
-
-  void warning(Message message, int offset, int length) {
-    messages.warning(message, offset, uri);
-  }
+  void addCompileTimeError(Message message, int charOffset, int length);
 }
 
 class Stack {
@@ -398,6 +389,7 @@ class Stack {
     for (int i = 0; i < count; i++) {
       final value = table[startIndex + i];
       tailList[i] = value is NullValue ? null : value;
+      table[startIndex + i] = null;
     }
     arrayLength -= count;
 

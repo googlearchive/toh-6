@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library analyzer.src.generated.error_verifier;
-
 import 'dart:collection';
 import "dart:math" as math;
 
@@ -16,6 +14,7 @@ import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/dart/element/visitor.dart';
 import 'package:analyzer/error/error.dart';
 import 'package:analyzer/error/listener.dart';
+import 'package:analyzer/src/dart/ast/ast.dart';
 import 'package:analyzer/src/dart/element/element.dart';
 import 'package:analyzer/src/dart/element/member.dart';
 import 'package:analyzer/src/dart/element/type.dart';
@@ -917,9 +916,14 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
   }
 
   @override
+  Object visitIntegerLiteral(IntegerLiteral node) {
+    _checkForOutOfRange(node);
+    return super.visitIntegerLiteral(node);
+  }
+
+  @override
   Object visitIsExpression(IsExpression node) {
     _checkForTypeAnnotationDeferredClass(node.type);
-    _checkForTypeAnnotationGenericFunctionParameter(node.type);
     return super.visitIsExpression(node);
   }
 
@@ -1721,8 +1725,7 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
    * overriding. The [parameters] is the parameters of the executable element.
    * The [errorNameTarget] is the node to report problems on.
    *
-   * See [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC],
-   * [CompileTimeErrorCode.INVALID_OVERRIDE_REQUIRED],
+   * See [CompileTimeErrorCode.INVALID_OVERRIDE_REQUIRED],
    * [CompileTimeErrorCode.INVALID_OVERRIDE_POSITIONAL],
    * [CompileTimeErrorCode.INVALID_OVERRIDE_NAMED],
    * [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE],
@@ -2088,10 +2091,6 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
     //
     List<ExecutableElement> overriddenExecutables = _inheritanceManager
         .lookupOverrides(_enclosingClass, executableElement.name);
-    if (_checkForInstanceMethodNameCollidesWithSuperclassStatic(
-        executableElement, errorNameTarget)) {
-      return;
-    }
     for (ExecutableElement overriddenElement in overriddenExecutables) {
       if (_checkForAllInvalidOverrideErrorCodes(executableElement,
           overriddenElement, parameters, parameterLocations, errorNameTarget)) {
@@ -2574,17 +2573,24 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
         _errorReporter.reportErrorForNode(
             StaticWarningCode.ASSIGNMENT_TO_CONST, expression);
       } else if (element.isFinal) {
-        if (element is FieldElementImpl &&
-            element.setter == null &&
-            element.isSynthetic) {
-          _errorReporter.reportErrorForNode(
-              StaticWarningCode.ASSIGNMENT_TO_FINAL_NO_SETTER,
-              highlightedNode,
-              [element.name, element.enclosingElement.displayName]);
+        if (element is FieldElementImpl) {
+          if (element.setter == null && element.isSynthetic) {
+            _errorReporter.reportErrorForNode(
+                StaticWarningCode.ASSIGNMENT_TO_FINAL_NO_SETTER,
+                highlightedNode,
+                [element.name, element.enclosingElement.displayName]);
+          } else {
+            _errorReporter.reportErrorForNode(
+                StaticWarningCode.ASSIGNMENT_TO_FINAL,
+                highlightedNode,
+                [element.name]);
+          }
           return;
         }
-        _errorReporter.reportErrorForNode(StaticWarningCode.ASSIGNMENT_TO_FINAL,
-            highlightedNode, [element.name]);
+        _errorReporter.reportErrorForNode(
+            StaticWarningCode.ASSIGNMENT_TO_FINAL_LOCAL,
+            highlightedNode,
+            [element.name]);
       }
     } else if (element is FunctionElement) {
       _errorReporter.reportErrorForNode(
@@ -3264,10 +3270,17 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
     if (type.element.isAbstract) {
       ConstructorElement element = expression.staticElement;
       if (element != null && !element.isFactory) {
-        if (expression.keyword.keyword == Keyword.CONST) {
+        bool isImplicit =
+            (expression as InstanceCreationExpressionImpl).isImplicit;
+        if (!isImplicit) {
           _errorReporter.reportErrorForNode(
-              StaticWarningCode.CONST_WITH_ABSTRACT_CLASS, typeName);
+              expression.isConst
+                  ? StaticWarningCode.CONST_WITH_ABSTRACT_CLASS
+                  : StaticWarningCode.NEW_WITH_ABSTRACT_CLASS,
+              typeName);
         } else {
+          // TODO(brianwilkerson/jwren) Create a new different StaticWarningCode
+          // which does not call out the new keyword so explicitly.
           _errorReporter.reportErrorForNode(
               StaticWarningCode.NEW_WITH_ABSTRACT_CLASS, typeName);
         }
@@ -4219,8 +4232,8 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
 
     _errorReporter.reportErrorForNode(
         CompileTimeErrorCode.IMPORT_INTERNAL_LIBRARY,
-        directive,
-        [directive.uri]);
+        directive.uri,
+        [directive.uri.stringValue]);
   }
 
   /**
@@ -4331,81 +4344,6 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
           name,
           [name.name, _getKind(element), element.enclosingElement.name]);
     }
-  }
-
-  /**
-   * Check whether the given [executableElement] collides with the name of a
-   * static method in one of its superclasses, and reports the appropriate
-   * warning if it does. The [errorNameTarget] is the node to report problems
-   * on.
-   *
-   * See [StaticTypeWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC].
-   */
-  bool _checkForInstanceMethodNameCollidesWithSuperclassStatic(
-      ExecutableElement executableElement, SimpleIdentifier errorNameTarget) {
-    String executableElementName = executableElement.name;
-    if (executableElement is! PropertyAccessorElement &&
-        !executableElement.isOperator) {
-      HashSet<ClassElement> visitedClasses = new HashSet<ClassElement>();
-      InterfaceType superclassType = _enclosingClass.supertype;
-      ClassElement superclassElement = superclassType?.element;
-      bool executableElementPrivate =
-          Identifier.isPrivateName(executableElementName);
-      while (superclassElement != null &&
-          !visitedClasses.contains(superclassElement)) {
-        visitedClasses.add(superclassElement);
-        LibraryElement superclassLibrary = superclassElement.library;
-        // Check fields.
-        FieldElement fieldElt =
-            superclassElement.getField(executableElementName);
-        if (fieldElt != null) {
-          // Ignore if private in a different library - cannot collide.
-          if (executableElementPrivate &&
-              _currentLibrary != superclassLibrary) {
-            continue;
-          }
-          // instance vs. static
-          if (fieldElt.isStatic) {
-            _errorReporter.reportErrorForNode(
-                StaticWarningCode
-                    .INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC,
-                errorNameTarget,
-                [executableElementName, fieldElt.enclosingElement.displayName]);
-            return true;
-          }
-        }
-        // Check methods.
-        List<MethodElement> methodElements = superclassElement.methods;
-        int length = methodElements.length;
-        for (int i = 0; i < length; i++) {
-          MethodElement methodElement = methodElements[i];
-          // We need the same name.
-          if (methodElement.name != executableElementName) {
-            continue;
-          }
-          // Ignore if private in a different library - cannot collide.
-          if (executableElementPrivate &&
-              _currentLibrary != superclassLibrary) {
-            continue;
-          }
-          // instance vs. static
-          if (methodElement.isStatic) {
-            _errorReporter.reportErrorForNode(
-                StaticWarningCode
-                    .INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC,
-                errorNameTarget,
-                [
-                  executableElementName,
-                  methodElement.enclosingElement.displayName
-                ]);
-            return true;
-          }
-        }
-        superclassType = superclassElement.supertype;
-        superclassElement = superclassType?.element;
-      }
-    }
-    return false;
   }
 
   /**
@@ -5354,6 +5292,20 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
     }
   }
 
+  void _checkForOutOfRange(IntegerLiteral node) {
+    String lexeme = node.literal.lexeme;
+    AstNode parent = node.parent;
+    bool isNegated =
+        parent is PrefixExpression && parent.operator.type == TokenType.MINUS;
+    if (!IntegerLiteralImpl.isValidLiteral(lexeme, isNegated)) {
+      if (isNegated) {
+        lexeme = '-$lexeme';
+      }
+      _errorReporter.reportErrorForNode(
+          CompileTimeErrorCode.INTEGER_LITERAL_OUT_OF_RANGE, node, [lexeme]);
+    }
+  }
+
   /**
    * Check that the given named optional [parameter] does not begin with '_'.
    *
@@ -5561,7 +5513,8 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
   void _checkForReferenceBeforeDeclaration(SimpleIdentifier node) {
     if (!node.inDeclarationContext() &&
         _hiddenElements != null &&
-        _hiddenElements.contains(node.staticElement)) {
+        _hiddenElements.contains(node.staticElement) &&
+        node.parent is! CommentReference) {
       _errorReporter.reportErrorForNode(
           CompileTimeErrorCode.REFERENCED_BEFORE_DECLARATION,
           node,
@@ -5625,6 +5578,17 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
       return;
     }
     DartType staticReturnType = _computeReturnTypeForMethod(returnExpression);
+    String displayName = _enclosingFunction.displayName;
+
+    void reportTypeError() => _errorReporter.reportTypeErrorForNode(
+        StaticTypeWarningCode.RETURN_OF_INVALID_TYPE,
+        returnExpression,
+        [staticReturnType, expectedReturnType, displayName]);
+    void reportTypeErrorFromClosure() => _errorReporter.reportTypeErrorForNode(
+        StaticTypeWarningCode.RETURN_OF_INVALID_TYPE_FROM_CLOSURE,
+        returnExpression,
+        [staticReturnType, expectedReturnType]);
+
     if (expectedReturnType.isVoid) {
       if (isArrowFunction) {
         // "void f(..) => e" admits all types for "e".
@@ -5636,22 +5600,27 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
           staticReturnType.isDartCoreNull) {
         return;
       }
-      _errorReporter.reportTypeErrorForNode(
-          StaticTypeWarningCode.RETURN_OF_INVALID_TYPE, returnExpression, [
-        staticReturnType,
-        expectedReturnType,
-        _enclosingFunction.displayName
-      ]);
+      if (displayName.isEmpty) {
+        reportTypeErrorFromClosure();
+      } else {
+        reportTypeError();
+      }
       return;
     }
-    if (_expressionIsAssignableAtType(
-        returnExpression, staticReturnType, expectedReturnType)) {
+
+    // TODO(mfairhurst) Make this stricter once codebases are compliant.
+    final invalidVoidReturn = staticReturnType.isVoid &&
+        !(expectedReturnType.isVoid || expectedReturnType.isDynamic);
+    if (!invalidVoidReturn &&
+        _expressionIsAssignableAtType(
+            returnExpression, staticReturnType, expectedReturnType)) {
       return;
     }
-    _errorReporter.reportTypeErrorForNode(
-        StaticTypeWarningCode.RETURN_OF_INVALID_TYPE,
-        returnExpression,
-        [staticReturnType, expectedReturnType, _enclosingFunction.displayName]);
+    if (displayName.isEmpty) {
+      reportTypeErrorFromClosure();
+    } else {
+      reportTypeError();
+    }
 
     // TODO(brianwilkerson) Define a hint corresponding to the warning and
     // report it if appropriate.
@@ -5755,28 +5724,6 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
     if (type is TypeName && type.isDeferred) {
       _errorReporter.reportErrorForNode(
           StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS, type, [type.name]);
-    }
-  }
-
-  /**
-   * Verify that the given type [name] is not a type parameter in a generic
-   * method.
-   *
-   * See [StaticWarningCode.TYPE_ANNOTATION_GENERIC_FUNCTION_PARAMETER].
-   */
-  void _checkForTypeAnnotationGenericFunctionParameter(TypeAnnotation type) {
-    if (type is TypeName) {
-      Identifier name = type.name;
-      if (name is SimpleIdentifier) {
-        Element element = name.staticElement;
-        if (element is TypeParameterElement &&
-            element.enclosingElement is ExecutableElement) {
-          _errorReporter.reportErrorForNode(
-              StaticWarningCode.TYPE_ANNOTATION_GENERIC_FUNCTION_PARAMETER,
-              name,
-              [name.name]);
-        }
-      }
     }
   }
 
@@ -6246,9 +6193,14 @@ class ErrorVerifier extends RecursiveAstVisitor<Object> {
           TypeParameterTypeImpl.getTypes(genericType.typeFormals);
       var typeArgs = typeArgumentList.map((t) => t.type).toList();
 
-      for (int i = 0, len = math.min(typeArgs.length, fnTypeParams.length);
-          i < len;
-          i++) {
+      // If the amount mismatches, clean up the lists to be substitutable. The
+      // mismatch in size is reported elsewhere, but we must successfully
+      // perform substitution to validate bounds on mismatched lists.
+      final providedLength = math.min(typeArgs.length, fnTypeParams.length);
+      fnTypeParams = fnTypeParams.sublist(0, providedLength);
+      typeArgs = typeArgs.sublist(0, providedLength);
+
+      for (int i = 0; i < providedLength; i++) {
         // Check the `extends` clause for the type parameter, if any.
         //
         // Also substitute to handle cases like this:

@@ -38,18 +38,6 @@ class HintCode extends ErrorCode {
       "The argument type '{0}' can't be assigned to the parameter type '{1}'.");
 
   /**
-   * This hint is generated when a function type is assigned to a function
-   * typed location, and the assignment will be invalid after fuzzy arrows
-   * (the treatment of dynamic as bottom in certain locations) is removed.
-   *
-   */
-  static const HintCode USES_DYNAMIC_AS_BOTTOM = const HintCode(
-      'USES_DYNAMIC_AS_BOTTOM',
-      "A function of type '{0}' can't be assigned to a variable of type '{1}'.",
-      "Try changing the type of the function, or "
-      "casting the right-hand type to '{1}'.");
-
-  /**
    * When the target expression uses '?.' operator, it can be `null`, so all the
    * subsequent invocations should also use '?.' operator.
    */
@@ -302,6 +290,16 @@ class HintCode extends ErrorCode {
       'INVALID_USE_OF_PROTECTED_MEMBER',
       "The member '{0}' can only be used within instance members of subclasses "
       "of '{1}'.");
+
+  /// This hint is generated anywhere where a member annotated with
+  /// `@visibleForTesting` is used outside the defining library, or a test.
+  ///
+  /// Parameters:
+  /// 0: the name of the member
+  /// 1: the name of the defining class
+  static const HintCode INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER =
+      const HintCode('INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER',
+          "The member '{0}' can only be used within '{1}' or a test.");
 
   /**
    * Hint for the `x is double` type checks.
@@ -631,12 +629,25 @@ class HintCode extends ErrorCode {
 
   /**
    * Unused imports are imports which are never used.
+   *
+   * Parameters:
+   * 0: The content of the unused import's uri
    */
-  static const HintCode UNUSED_IMPORT = const HintCode(
-      'UNUSED_IMPORT', "Unused import.", "Try removing the import directive.");
+  static const HintCode UNUSED_IMPORT = const HintCode('UNUSED_IMPORT',
+      "Unused import: '{0}'.", "Try removing the import directive.");
 
   /**
-   * Unused local variables are local variables which are never read.
+   * Unused labels are labels that are never referenced in either a 'break' or
+   * 'continue' statement.
+   */
+  static const HintCode UNUSED_LABEL = const HintCode(
+      'UNUSED_LABEL',
+      "The label '{0}' isn't used.",
+      "Try removing the label, or "
+      "using it in either a 'break' or 'continue' statement.");
+
+  /**
+   * Unused local variables are local variables that are never read.
    */
   static const HintCode UNUSED_LOCAL_VARIABLE = const HintCode(
       'UNUSED_LOCAL_VARIABLE',

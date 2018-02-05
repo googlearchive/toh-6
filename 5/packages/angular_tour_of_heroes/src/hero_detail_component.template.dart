@@ -85,17 +85,17 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
   import8.DivElement _el_0;
   import8.Element _el_1;
   import8.Text _text_2;
-  import8.DivElement _el_3;
-  import8.Element _el_4;
-  import8.Text _text_6;
-  import8.DivElement _el_7;
-  import8.Element _el_8;
-  import8.InputElement _el_10;
-  import12.DefaultValueAccessor _DefaultValueAccessor_10_4;
-  List<dynamic> _NgValueAccessor_10_5;
-  import13.NgModel _NgModel_10_6;
-  import8.ButtonElement _el_11;
-  import8.ButtonElement _el_13;
+  import8.DivElement _el_4;
+  import8.Element _el_5;
+  import8.Text _text_7;
+  import8.DivElement _el_8;
+  import8.Element _el_9;
+  import8.InputElement _el_11;
+  import12.DefaultValueAccessor _DefaultValueAccessor_11_4;
+  List<dynamic> _NgValueAccessor_11_5;
+  import13.NgModel _NgModel_11_6;
+  import8.ButtonElement _el_12;
+  import8.ButtonElement _el_14;
   var _expr_0;
   var _expr_1;
   _ViewHeroDetailComponent1(AppView<dynamic> parentView, num parentIndex) : super(import6.ViewType.EMBEDDED, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
@@ -110,53 +110,55 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
     addShimE(_el_1);
     _text_2 = new import8.Text('');
     _el_1.append(_text_2);
-    _el_3 = createDivAndAppend(doc, _el_0);
-    addShimC(_el_3);
-    _el_4 = createAndAppend(doc, 'label', _el_3);
-    addShimE(_el_4);
-    import8.Text _text_5 = new import8.Text('id:');
-    _el_4.append(_text_5);
-    _text_6 = new import8.Text('');
-    _el_3.append(_text_6);
-    _el_7 = createDivAndAppend(doc, _el_0);
-    addShimC(_el_7);
-    _el_8 = createAndAppend(doc, 'label', _el_7);
-    addShimE(_el_8);
-    import8.Text _text_9 = new import8.Text('name:');
-    _el_8.append(_text_9);
-    _el_10 = createAndAppend(doc, 'input', _el_7);
-    createAttr(_el_10, 'placeholder', 'name');
-    addShimC(_el_10);
-    _DefaultValueAccessor_10_4 = new import12.DefaultValueAccessor(_el_10);
-    _NgValueAccessor_10_5 = [_DefaultValueAccessor_10_4];
-    _NgModel_10_6 = new import13.NgModel(null, _NgValueAccessor_10_5);
-    _el_11 = createAndAppend(doc, 'button', _el_0);
+    import8.Text _text_3 = new import8.Text(' details!');
+    _el_1.append(_text_3);
+    _el_4 = createDivAndAppend(doc, _el_0);
+    addShimC(_el_4);
+    _el_5 = createAndAppend(doc, 'label', _el_4);
+    addShimE(_el_5);
+    import8.Text _text_6 = new import8.Text('id:');
+    _el_5.append(_text_6);
+    _text_7 = new import8.Text('');
+    _el_4.append(_text_7);
+    _el_8 = createDivAndAppend(doc, _el_0);
+    addShimC(_el_8);
+    _el_9 = createAndAppend(doc, 'label', _el_8);
+    addShimE(_el_9);
+    import8.Text _text_10 = new import8.Text('name:');
+    _el_9.append(_text_10);
+    _el_11 = createAndAppend(doc, 'input', _el_8);
+    createAttr(_el_11, 'placeholder', 'name');
     addShimC(_el_11);
-    import8.Text _text_12 = new import8.Text('Back');
-    _el_11.append(_text_12);
-    _el_13 = createAndAppend(doc, 'button', _el_0);
-    addShimC(_el_13);
-    import8.Text _text_14 = new import8.Text('Save');
-    _el_13.append(_text_14);
-    _el_10.addEventListener('input', eventHandler1(_handle_input_10_1));
-    _el_10.addEventListener('blur', eventHandler0(_DefaultValueAccessor_10_4.touchHandler));
-    final subscription_0 = _NgModel_10_6.update.listen(eventHandler1(_handle_ngModelChange_10_0));
-    _el_11.addEventListener('click', eventHandler0(ctx.goBack));
-    _el_13.addEventListener('click', eventHandler0(ctx.save));
+    _DefaultValueAccessor_11_4 = new import12.DefaultValueAccessor(_el_11);
+    _NgValueAccessor_11_5 = [_DefaultValueAccessor_11_4];
+    _NgModel_11_6 = new import13.NgModel(null, _NgValueAccessor_11_5);
+    _el_12 = createAndAppend(doc, 'button', _el_0);
+    addShimC(_el_12);
+    import8.Text _text_13 = new import8.Text('Back');
+    _el_12.append(_text_13);
+    _el_14 = createAndAppend(doc, 'button', _el_0);
+    addShimC(_el_14);
+    import8.Text _text_15 = new import8.Text('Save');
+    _el_14.append(_text_15);
+    _el_11.addEventListener('input', eventHandler1(_handle_input_11_1));
+    _el_11.addEventListener('blur', eventHandler0(_DefaultValueAccessor_11_4.touchHandler));
+    final subscription_0 = _NgModel_11_6.update.listen(eventHandler1(_handle_ngModelChange_11_0));
+    _el_12.addEventListener('click', eventHandler0(ctx.goBack));
+    _el_14.addEventListener('click', eventHandler0(ctx.save));
     init([_el_0], [subscription_0]);
     return null;
   }
 
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
-    if ((identical(token, import12.DefaultValueAccessor) && (10 == nodeIndex))) {
-      return _DefaultValueAccessor_10_4;
+    if ((identical(token, import12.DefaultValueAccessor) && (11 == nodeIndex))) {
+      return _DefaultValueAccessor_11_4;
     }
-    if ((identical(token, const import14.OpaqueToken<import15.ControlValueAccessor<dynamic>>('NgValueAccessor')) && (10 == nodeIndex))) {
-      return _NgValueAccessor_10_5;
+    if ((identical(token, const import14.OpaqueToken<import15.ControlValueAccessor<dynamic>>('NgValueAccessor')) && (11 == nodeIndex))) {
+      return _NgValueAccessor_11_5;
     }
-    if (((identical(token, import13.NgModel) || identical(token, import16.NgControl)) && (10 == nodeIndex))) {
-      return _NgModel_10_6;
+    if (((identical(token, import13.NgModel) || identical(token, import16.NgControl)) && (11 == nodeIndex))) {
+      return _NgModel_11_6;
     }
     return notFoundResult;
   }
@@ -167,29 +169,29 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
     bool changed = false;
     bool firstCheck = (this.cdState == 0);
     changed = false;
-    _NgModel_10_6.model = _ctx.hero.name;
-    _NgModel_10_6.ngAfterChanges();
+    _NgModel_11_6.model = _ctx.hero.name;
+    _NgModel_11_6.ngAfterChanges();
     if (firstCheck) {
-      _NgModel_10_6.ngOnInit();
+      _NgModel_11_6.ngOnInit();
     }
-    final currVal_0 = import9.interpolate1('', _ctx.hero.name, ' details!');
+    final currVal_0 = import9.interpolate0(_ctx.hero.name);
     if (!identical(_expr_0, currVal_0)) {
       _text_2.text = currVal_0;
       _expr_0 = currVal_0;
     }
     final currVal_1 = import9.interpolate0(_ctx.hero.id);
     if (!identical(_expr_1, currVal_1)) {
-      _text_6.text = currVal_1;
+      _text_7.text = currVal_1;
       _expr_1 = currVal_1;
     }
   }
 
-  void _handle_ngModelChange_10_0($event) {
+  void _handle_ngModelChange_11_0($event) {
     ctx.hero.name = $event;
   }
 
-  void _handle_input_10_1($event) {
-    _DefaultValueAccessor_10_4.onChange($event.target.value);
+  void _handle_input_11_1($event) {
+    _DefaultValueAccessor_11_4.onChange($event.target.value);
   }
 }
 

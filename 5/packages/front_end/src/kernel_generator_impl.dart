@@ -15,30 +15,30 @@ import 'fasta/severity.dart' show Severity;
 import 'fasta/compiler_context.dart' show CompilerContext;
 import 'fasta/deprecated_problems.dart' show deprecated_InputError, reportCrash;
 import 'fasta/dill/dill_target.dart' show DillTarget;
-import 'fasta/kernel/kernel_outline_shaker.dart';
 import 'fasta/kernel/kernel_target.dart' show KernelTarget;
 import 'fasta/kernel/utils.dart';
 import 'fasta/kernel/verifier.dart';
 import 'fasta/uri_translator.dart' show UriTranslator;
 
-/// Implementation for the `package:front_end/kernel_generator.dart` and
-/// `package:front_end/summary_generator.dart` APIs.
+/// Implementation for the
+/// `package:front_end/src/api_prototype/kernel_generator.dart` and
+/// `package:front_end/src/api_prototype/summary_generator.dart` APIs.
 Future<CompilerResult> generateKernel(ProcessedOptions options,
     {bool buildSummary: false,
     bool buildProgram: true,
-    bool trimDependencies: false}) async {
+    bool truncateSummary: false}) async {
   return await CompilerContext.runWithOptions(options, (_) async {
     return await generateKernelInternal(
         buildSummary: buildSummary,
         buildProgram: buildProgram,
-        trimDependencies: trimDependencies);
+        truncateSummary: truncateSummary);
   });
 }
 
 Future<CompilerResult> generateKernelInternal(
     {bool buildSummary: false,
     bool buildProgram: true,
-    bool trimDependencies: false}) async {
+    bool truncateSummary: false}) async {
   var options = CompilerContext.current.options;
   var fs = options.fileSystem;
   if (!await options.validateOptions()) return null;
@@ -63,8 +63,8 @@ Future<CompilerResult> generateKernelInternal(
     CanonicalName nameRoot = sdkSummary?.root ?? new CanonicalName.root();
     if (sdkSummary != null) {
       var excluded = externalLibs(sdkSummary);
-      dillTarget.loader
-          .appendLibraries(sdkSummary, (uri) => !excluded.contains(uri));
+      dillTarget.loader.appendLibraries(sdkSummary,
+          filter: (uri) => !excluded.contains(uri));
     }
 
     // TODO(sigmund): provide better error reporting if input summaries or
@@ -72,22 +72,22 @@ Future<CompilerResult> generateKernelInternal(
     // sort them).
     for (var inputSummary in await options.loadInputSummaries(nameRoot)) {
       var excluded = externalLibs(inputSummary);
-      dillTarget.loader
-          .appendLibraries(inputSummary, (uri) => !excluded.contains(uri));
+      dillTarget.loader.appendLibraries(inputSummary,
+          filter: (uri) => !excluded.contains(uri));
     }
 
     // All summaries are considered external and shouldn't include source-info.
     dillTarget.loader.libraries.forEach((lib) {
+      // TODO(ahe): Don't do this, and remove [external_state_snapshot.dart].
       lib.isExternal = true;
-      lib.dependencies.clear();
     });
 
     // Linked dependencies are meant to be part of the program so they are not
     // marked external.
     for (var dependency in await options.loadLinkDependencies(nameRoot)) {
       var excluded = externalLibs(dependency);
-      dillTarget.loader
-          .appendLibraries(dependency, (uri) => !excluded.contains(uri));
+      dillTarget.loader.appendLibraries(dependency,
+          filter: (uri) => !excluded.contains(uri));
     }
 
     await dillTarget.buildOutlines();
@@ -98,17 +98,6 @@ Future<CompilerResult> generateKernelInternal(
         await kernelTarget.buildOutlines(nameRoot: nameRoot);
     List<int> summary = null;
     if (buildSummary) {
-      if (trimDependencies) {
-        // TODO(sigmund): see if it is worth supporting this. Note: trimming the
-        // program is destructive, so if we are emitting summaries and the
-        // program in a single API call, we would need to clone the program here
-        // to avoid deleting pieces that are needed by kernelTarget.buildProgram
-        // below.
-        assert(!buildProgram);
-        var excluded =
-            dillTarget.loader.libraries.map((lib) => lib.importUri).toSet();
-        trimProgram(summaryProgram, (uri) => !excluded.contains(uri));
-      }
       if (options.verify) {
         for (var error in verifyProgram(summaryProgram)) {
           options.report(error, Severity.error);
@@ -118,32 +107,36 @@ Future<CompilerResult> generateKernelInternal(
         printProgramText(summaryProgram,
             libraryFilter: kernelTarget.isSourceLibrary);
       }
-      if (kernelTarget.errors.isEmpty) {
-        summary = serializeProgram(summaryProgram, excludeUriToSource: true);
+
+      // Copy the program to exclude the uriToSource map from the summary.
+      //
+      // Note: we don't pass the library argument to the constructor to
+      // preserve the the libraries parent pointer (it should continue to point
+      // to the program within KernelTarget).
+      var trimmedSummaryProgram = new Program(nameRoot: summaryProgram.root)
+        ..libraries.addAll(truncateSummary
+            ? kernelTarget.loader.libraries
+            : summaryProgram.libraries);
+      trimmedSummaryProgram.metadata.addAll(summaryProgram.metadata);
+
+      // As documented, we only run outline transformations when we are building
+      // summaries without building a full program (at this time, that's
+      // the only need we have for these transformations).
+      if (!buildProgram) {
+        options.target.performOutlineTransformations(trimmedSummaryProgram);
+        options.ticker.logMs("Transformed outline");
       }
+      summary = serializeProgram(trimmedSummaryProgram);
       options.ticker.logMs("Generated outline");
     }
 
     Program program;
     if (buildProgram && kernelTarget.errors.isEmpty) {
       program = await kernelTarget.buildProgram(verify: options.verify);
-      if (trimDependencies) {
-        var excluded =
-            dillTarget.loader.libraries.map((lib) => lib.importUri).toSet();
-        trimProgram(program, (uri) => !excluded.contains(uri));
-      }
       if (options.debugDump) {
         printProgramText(program, libraryFilter: kernelTarget.isSourceLibrary);
       }
       options.ticker.logMs("Generated program");
-    }
-
-    if (kernelTarget.errors.isNotEmpty) {
-      // TODO(sigmund): remove duplicate error reporting. Currently
-      // kernelTarget.errors contains recoverable and unrecoverable errors. We
-      // are reporting unrecoverable errors twice.
-      kernelTarget.errors.forEach((e) => options.report(e, Severity.error));
-      return null;
     }
 
     return new CompilerResult(

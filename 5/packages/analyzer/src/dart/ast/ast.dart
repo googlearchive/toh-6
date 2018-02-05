@@ -4113,6 +4113,61 @@ abstract class ExpressionImpl extends AstNodeImpl implements Expression {
     return DynamicTypeImpl.instance;
   }
 
+  /**
+   * An expression _e_ is said to _occur in a constant context_,
+   * * if _e_ is an element of a constant list literal, or a key or value of an
+   *   entry of a constant map literal.
+   * * if _e_ is an actual argument of a constant object expression or of a
+   *   metadata annotation.
+   * * if _e_ is the initializing expression of a constant variable declaration.
+   * * if _e_ is a switch case expression.
+   * * if _e_ is an immediate subexpression of an expression _e1_ which occurs
+   *   in a constant context, unless _e1_ is a `throw` expression or a function
+   *   literal.
+   *
+   * This roughly means that everything which is inside a syntactically constant
+   * expression is in a constant context. A `throw` expression is currently not
+   * allowed in a constant expression, but extensions affecting that status may
+   * be considered. A similar situation arises for function literals.
+   *
+   * Note that the default value of an optional formal parameter is _not_ a
+   * constant context. This choice reserves some freedom to modify the semantics
+   * of default values.
+   */
+  bool get inConstantContext {
+    AstNode child = this;
+    while (child is Expression ||
+        child is ArgumentList ||
+        child is MapLiteralEntry) {
+      AstNode parent = child.parent;
+      if (parent is TypedLiteralImpl && parent.constKeyword != null) {
+        // Inside an explicitly `const` list or map literal.
+        return true;
+      } else if (parent is InstanceCreationExpression) {
+        if (parent.keyword?.keyword == Keyword.CONST) {
+          // Inside an explicitly `const` instance creation expression.
+          return true;
+        } else if (parent.keyword?.keyword == Keyword.NEW) {
+          // Inside an explicitly non-`const` instance creation expression.
+          return false;
+        }
+      } else if (parent is Annotation) {
+        // Inside an annotation.
+        return true;
+      } else if (parent is VariableDeclaration) {
+        AstNode grandParent = parent.parent;
+        // Inside the initializer for a `const` variable declaration.
+        return grandParent is VariableDeclarationList &&
+            grandParent.keyword?.keyword == Keyword.CONST;
+      } else if (parent is SwitchCase) {
+        // Inside a switch case.
+        return true;
+      }
+      child = parent;
+    }
+    return false;
+  }
+
   @override
   bool get isAssignable => false;
 
@@ -6367,13 +6422,15 @@ class IndexExpressionImpl extends ExpressionImpl implements IndexExpression {
  * An instance creation expression.
  *
  *    newExpression ::=
- *        ('new' | 'const') [TypeName] ('.' [SimpleIdentifier])? [ArgumentList]
+ *        ('new' | 'const')? [TypeName] ('.' [SimpleIdentifier])? [ArgumentList]
+ *
+ * 'new' | 'const' are only optional if the previewDart2 option is enabled.
  */
 class InstanceCreationExpressionImpl extends ExpressionImpl
     implements InstanceCreationExpression {
   /**
    * The 'new' or 'const' keyword used to indicate how an object should be
-   * created.
+   * created, or `null` if the keyword is implicit.
    */
   @override
   Token keyword;
@@ -6414,7 +6471,7 @@ class InstanceCreationExpressionImpl extends ExpressionImpl
   }
 
   @override
-  Token get beginToken => keyword;
+  Token get beginToken => keyword ?? _constructorName.beginToken;
 
   @override
   Iterable<SyntacticEntity> get childEntities => new ChildEntities()
@@ -6434,7 +6491,20 @@ class InstanceCreationExpressionImpl extends ExpressionImpl
   Token get endToken => _argumentList.endToken;
 
   @override
-  bool get isConst => keyword?.keyword == Keyword.CONST;
+  bool get isConst {
+    if (!isImplicit) {
+      return keyword.keyword == Keyword.CONST;
+    } else {
+      return inConstantContext;
+    }
+  }
+
+  /**
+   * Return `true` if this is an implicit constructor invocations.
+   *
+   * This can only be `true` when the previewDart2 option is enabled.
+   */
+  bool get isImplicit => keyword == null;
 
   @override
   int get precedence => 16;
@@ -6498,6 +6568,69 @@ class IntegerLiteralImpl extends LiteralImpl implements IntegerLiteral {
   @override
   void visitChildren(AstVisitor visitor) {
     // There are no children to visit.
+  }
+
+  /**
+   * Return `true` if the given [lexeme] is a valid lexeme for an integer
+   * literal. The flag [isNegative] should be `true` if the lexeme is preceded
+   * by a unary negation operator.
+   */
+  static bool isValidLiteral(String lexeme, bool isNegative) {
+    if (lexeme.startsWith('0x') || lexeme.startsWith('0X')) {
+      return _isValidHexadecimalLiteral(lexeme, isNegative);
+    }
+    return _isValidDecimalLiteral(lexeme, isNegative);
+  }
+
+  /**
+   * Return `true` if the given [lexeme] is a valid lexeme for a decimal integer
+   * literal. The flag [isNegative] should be `true` if the lexeme is preceded
+   * by a minus operator.
+   */
+  static bool _isValidDecimalLiteral(String lexeme, bool isNegative) {
+    int length = lexeme.length;
+    int index = 0;
+    while (length > 0 && lexeme.substring(index, index + 1) == '0') {
+      length--;
+      index++;
+    }
+    if (length < 19) {
+      return true;
+    } else if (length > 19) {
+      return false;
+    }
+    if (int.parse(lexeme.substring(index, index + 1)) < 9) {
+      return true;
+    }
+    int bound;
+    if (isNegative) {
+      bound = 223372036854775808;
+    } else {
+      bound = 223372036854775807;
+    }
+    return int.parse(lexeme.substring(index + 1)) <= bound;
+  }
+
+  /**
+   * Return `true` if the given [lexeme] is a valid lexeme for a hexadecimal
+   * integer literal. The lexeme is expected to start with either `0x` or `0X`.
+   */
+  static bool _isValidHexadecimalLiteral(String lexeme, bool isNegative) {
+    int length = lexeme.length - 2;
+    int index = 2;
+    while (length > 0 && lexeme.substring(index, index + 1) == '0') {
+      length--;
+      index++;
+    }
+    if (length < 16) {
+      return true;
+    } else if (length > 16) {
+      return false;
+    }
+    if (!isNegative) {
+      return true;
+    }
+    return int.parse(lexeme.substring(index, index + 1), radix: 16) <= 7;
   }
 }
 
@@ -10583,6 +10716,11 @@ abstract class TypedLiteralImpl extends LiteralImpl implements TypedLiteral {
    */
   TypedLiteralImpl(this.constKeyword, TypeArgumentListImpl typeArguments) {
     _typeArguments = _becomeParentOf(typeArguments);
+  }
+
+  @override
+  bool get isConst {
+    return constKeyword != null || inConstantContext;
   }
 
   @override

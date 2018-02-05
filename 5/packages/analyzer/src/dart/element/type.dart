@@ -191,6 +191,12 @@ class CircularFunctionTypeImpl extends DynamicTypeImpl
   FunctionTypeImpl substitute3(List<DartType> argumentTypes) => this;
 
   @override
+  FunctionType substitute4(
+      List<TypeParameterElement> typeParameters, List<DartType> typeArguments) {
+    return this;
+  }
+
+  @override
   void _forEachParameterType(
       ParameterKind kind, callback(String name, DartType type)) {
     // There are no parameters.
@@ -412,14 +418,17 @@ class FunctionTypeImpl extends TypeImpl implements FunctionType {
    * Initialize a newly created function type that is semantically the same as
    * [original], but which has been syntactically renamed with fresh type
    * parameters at its outer binding site (if any).
+   *
+   * If type formals is empty, this returns the original unless [force] is set
+   * to [true].
    */
-  factory FunctionTypeImpl.fresh(FunctionType original) {
+  factory FunctionTypeImpl.fresh(FunctionType original, {bool force = false}) {
     // We build up a substitution for the type parameters,
     // {variablesFresh/variables} then apply it.
 
     var originalFormals = original.typeFormals;
     var formalCount = originalFormals.length;
-    if (formalCount == 0) return original;
+    if (formalCount == 0 && !force) return original;
 
     // Allocate fresh type variables
     var typeVars = <DartType>[];
@@ -1014,6 +1023,20 @@ class FunctionTypeImpl extends TypeImpl implements FunctionType {
   @override
   FunctionTypeImpl substitute3(List<DartType> argumentTypes) =>
       substitute2(argumentTypes, typeArguments);
+
+  /**
+   * Perform simple substitution of [typeParameters] with [typeArguments].
+   */
+  FunctionType substitute4(
+      List<TypeParameterElement> typeParameters, List<DartType> typeArguments) {
+    if (typeArguments.length != typeParameters.length) {
+      throw new ArgumentError(
+          "typeArguments.length (${typeArguments.length}) != '"
+          "'typeParameters.length (${typeParameters.length})");
+    }
+    return new FunctionTypeImpl._(element, name, [], typeArguments,
+        typeParameters, _returnType, _parameters, true);
+  }
 
   /**
    * Invokes [callback] for each parameter of [kind] with the parameter's [name]
@@ -2102,33 +2125,6 @@ class InterfaceTypeImpl extends TypeImpl implements InterfaceType {
         typeArguments, argumentTypes, parameterTypes, prune);
     if (listsEqual(newTypeArguments, typeArguments)) {
       return this;
-    }
-
-    if (isDartAsyncFuture && newTypeArguments.isNotEmpty) {
-      //
-      // In strong mode interpret Future< T > as Future< flatten(T) >
-      //
-      // For example, Future<Future<T>> will flatten to Future<T>.
-      //
-      // In the Dart 3rd edition spec, this flatten operation is used for
-      // `async` and `await`. In strong mode, we extend it to all Future<T>
-      // instantiations. This allows typing of Future-related operations
-      // in dart:async in a way that matches their runtime behavior and provides
-      // precise return types for users of these APIs.
-      //
-      // For example:
-      //
-      //     abstract class Future<T> {
-      //       Future<S> then<S>(S onValue(T value), ...);
-      //     }
-      //
-      // Given a call where S <: Future<R> for some R, we will need to flatten
-      // the return type so it is Future< flatten(S) >, yielding Future<R>.
-      //
-      if (element.library.context.analysisOptions.strongMode) {
-        TypeImpl t = newTypeArguments[0];
-        newTypeArguments[0] = t.flattenFutures(new StrongTypeSystemImpl(null));
-      }
     }
 
     InterfaceTypeImpl newType = new InterfaceTypeImpl(element, prune);

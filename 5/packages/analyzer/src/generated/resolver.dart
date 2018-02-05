@@ -32,6 +32,7 @@ import 'package:analyzer/src/generated/static_type_analyzer.dart';
 import 'package:analyzer/src/generated/testing/element_factory.dart';
 import 'package:analyzer/src/generated/type_system.dart';
 import 'package:analyzer/src/generated/utilities_dart.dart';
+import 'package:path/path.dart' as path;
 
 export 'package:analyzer/src/dart/resolver/inheritance_manager.dart';
 export 'package:analyzer/src/dart/resolver/scope.dart';
@@ -47,6 +48,10 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
   static String _NULL_TYPE_NAME = "Null";
 
   static String _TO_INT_METHOD_NAME = "toInt";
+
+  static final _testDir = '${path.separator}test${path.separator}';
+
+  static final _testingDir = '${path.separator}testing${path.separator}';
 
   /**
    * The class containing the AST nodes being visited, or `null` if we are not in the scope of
@@ -353,7 +358,7 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
   @override
   Object visitSimpleIdentifier(SimpleIdentifier node) {
     _checkForDeprecatedMemberUseAtIdentifier(node);
-    _checkForInvalidProtectedMemberAccess(node);
+    _checkForInvalidAccess(node);
     return super.visitSimpleIdentifier(node);
   }
 
@@ -445,24 +450,22 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
         !_currentLibrary.context.analysisOptions.enableSuperMixins) {
       Element element = name.staticElement;
       if (element is ExecutableElement && element.isAbstract) {
-        if (!_enclosingClass.hasNoSuchMethod) {
-          ExecutableElement concrete = null;
-          if (element.kind == ElementKind.METHOD) {
-            concrete = _enclosingClass.lookUpInheritedConcreteMethod(
-                element.displayName, _currentLibrary);
-          } else if (element.kind == ElementKind.GETTER) {
-            concrete = _enclosingClass.lookUpInheritedConcreteGetter(
-                element.displayName, _currentLibrary);
-          } else if (element.kind == ElementKind.SETTER) {
-            concrete = _enclosingClass.lookUpInheritedConcreteSetter(
-                element.displayName, _currentLibrary);
-          }
-          if (concrete == null) {
-            _errorReporter.reportTypeErrorForNode(
-                HintCode.ABSTRACT_SUPER_MEMBER_REFERENCE,
-                name,
-                [element.kind.displayName, name.name]);
-          }
+        ExecutableElement concrete = null;
+        if (element.kind == ElementKind.METHOD) {
+          concrete = _enclosingClass.lookUpInheritedConcreteMethod(
+              element.displayName, _currentLibrary);
+        } else if (element.kind == ElementKind.GETTER) {
+          concrete = _enclosingClass.lookUpInheritedConcreteGetter(
+              element.displayName, _currentLibrary);
+        } else if (element.kind == ElementKind.SETTER) {
+          concrete = _enclosingClass.lookUpInheritedConcreteSetter(
+              element.displayName, _currentLibrary);
+        }
+        if (concrete == null) {
+          _errorReporter.reportTypeErrorForNode(
+              HintCode.ABSTRACT_SUPER_MEMBER_REFERENCE,
+              name,
+              [element.kind.displayName, name.name]);
         }
       }
     }
@@ -633,7 +636,6 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
    *
    * @param element some element to check for deprecated use of
    * @param node the node use for the location of the error
-   * @return `true` if and only if a hint code is generated on the passed node
    * See [HintCode.DEPRECATED_MEMBER_USE].
    */
   void _checkForDeprecatedMemberUse(Element element, AstNode node) {
@@ -828,6 +830,111 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
     }
   }
 
+  /// Produces a hint if [identifier] is accessed from an invalid location. In
+  /// particular:
+  ///
+  /// * if the given identifier is a protected closure, field or
+  ///   getter/setter, method closure or invocation accessed outside a subclass,
+  ///   or accessed outside the library wherein the identifier is declared, or
+  /// * if the given identifier is a closure, field, getter, setter, method
+  ///   closure or invocation which is annotated with `visibleForTesting`, and
+  ///   is accessed outside of the defining library, and the current library
+  ///   does not have the word 'test' in its name.
+  void _checkForInvalidAccess(SimpleIdentifier identifier) {
+    if (identifier.inDeclarationContext()) {
+      return;
+    }
+
+    bool isProtected(Element element) {
+      if (element is PropertyAccessorElement &&
+          element.enclosingElement is ClassElement &&
+          (element.isProtected || element.variable.isProtected)) {
+        return true;
+      }
+      if (element is MethodElement &&
+          element.enclosingElement is ClassElement &&
+          element.isProtected) {
+        return true;
+      }
+      return false;
+    }
+
+    bool isVisibleForTesting(Element element) {
+      if (element == null) {
+        return false;
+      }
+      if (element.isVisibleForTesting) {
+        return true;
+      }
+      if (element is PropertyAccessorElement &&
+          element.enclosingElement is ClassElement &&
+          element.variable.isVisibleForTesting) {
+        return true;
+      }
+      return false;
+    }
+
+    bool inCommentReference(SimpleIdentifier identifier) =>
+        identifier.getAncestor((AstNode node) => node is CommentReference) !=
+        null;
+
+    bool inCurrentLibrary(Element element) =>
+        element.library == _currentLibrary;
+
+    bool inExportDirective(SimpleIdentifier identifier) =>
+        identifier.parent is Combinator &&
+        identifier.parent.parent is ExportDirective;
+
+    bool inTestDirectory(LibraryElement library) =>
+        library.definingCompilationUnit.source.fullName.contains(_testDir) ||
+        library.definingCompilationUnit.source.fullName.contains(_testingDir);
+
+    Element element = identifier.bestElement;
+    if (!isProtected(element) && !isVisibleForTesting(element)) {
+      return;
+    }
+
+    if (isProtected(element)) {
+      if (inCurrentLibrary(element) || inCommentReference(identifier)) {
+        // The access is valid; even if [element] is also marked
+        // `visibleForTesting`, the "visibilities" are unioned.
+        return;
+      }
+      ClassElement definingClass = element.enclosingElement;
+      ClassDeclaration accessingClass =
+          identifier.getAncestor((AstNode node) => node is ClassDeclaration);
+      if (_hasTypeOrSuperType(accessingClass?.element, definingClass.type)) {
+        return;
+      }
+    }
+    if (isVisibleForTesting(element)) {
+      if (inCurrentLibrary(element) ||
+          inTestDirectory(_currentLibrary) ||
+          inExportDirective(identifier) ||
+          inCommentReference(identifier)) {
+        // The access is valid; even if [element] is also marked
+        // `protected`, the "visibilities" are unioned.
+        return;
+      }
+    }
+
+    // At this point, [identifier] was not cleared as protected access, nor
+    // cleared as access for testing. Report the appropriate violation(s).
+    Element definingClass = element.enclosingElement;
+    if (isProtected(element)) {
+      _errorReporter.reportErrorForNode(
+          HintCode.INVALID_USE_OF_PROTECTED_MEMBER,
+          identifier,
+          [identifier.name.toString(), definingClass.name]);
+    }
+    if (isVisibleForTesting(element)) {
+      _errorReporter.reportErrorForNode(
+          HintCode.INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER,
+          identifier,
+          [identifier.name.toString(), definingClass.name]);
+    }
+  }
+
   /**
    * This verifies that the passed left hand side and right hand side represent a valid assignment.
    *
@@ -901,53 +1008,6 @@ class BestPracticesVerifier extends RecursiveAstVisitor<Object> {
 
     _errorReporter.reportErrorForNode(HintCode.INVALID_FACTORY_METHOD_IMPL,
         decl.name, [decl.name.toString()]);
-  }
-
-  /**
-   * Produces a hint if the given identifier is a protected closure, field or
-   * getter/setter, method closure or invocation accessed outside a subclass.
-   */
-  void _checkForInvalidProtectedMemberAccess(SimpleIdentifier identifier) {
-    if (identifier.inDeclarationContext()) {
-      return;
-    }
-
-    bool isProtected(Element element) {
-      if (element is PropertyAccessorElement &&
-          element.enclosingElement is ClassElement &&
-          (element.isProtected || element.variable.isProtected)) {
-        return true;
-      }
-      if (element is MethodElement &&
-          element.enclosingElement is ClassElement &&
-          element.isProtected) {
-        return true;
-      }
-      return false;
-    }
-
-    bool inCommentReference(SimpleIdentifier identifier) =>
-        identifier.getAncestor((AstNode node) => node is CommentReference) !=
-        null;
-
-    bool inCurrentLibrary(Element element) =>
-        element.library == _currentLibrary;
-
-    Element element = identifier.bestElement;
-    if (isProtected(element) &&
-        !inCurrentLibrary(element) &&
-        !inCommentReference(identifier)) {
-      ClassElement definingClass = element.enclosingElement;
-      ClassDeclaration accessingClass =
-          identifier.getAncestor((AstNode node) => node is ClassDeclaration);
-      if (accessingClass == null ||
-          !_hasTypeOrSuperType(accessingClass.element, definingClass.type)) {
-        _errorReporter.reportErrorForNode(
-            HintCode.INVALID_USE_OF_PROTECTED_MEMBER,
-            identifier,
-            [identifier.name.toString(), definingClass.name]);
-      }
-    }
   }
 
   /**
@@ -2011,8 +2071,7 @@ class Dart2JSVerifier extends RecursiveAstVisitor<Object> {
 }
 
 /**
- * Instances of the class `DeadCodeVerifier` traverse an AST structure looking for cases of
- * [HintCode.DEAD_CODE].
+ * A visitor that finds dead code and unused labels.
  */
 class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   /**
@@ -2026,9 +2085,14 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   final TypeSystem _typeSystem;
 
   /**
-   * Create a new instance of the [DeadCodeVerifier].
-   *
-   * @param errorReporter the error reporter
+   * The object used to track the usage of labels within a given label scope.
+   */
+  _LabelTracker labelTracker;
+
+  /**
+   * Initialize a newly created dead code verifier that will report dead code to
+   * the given [errorReporter] and will use the given [typeSystem] if one is
+   * provided.
    */
   DeadCodeVerifier(this._errorReporter, {TypeSystem typeSystem})
       : this._typeSystem = typeSystem ?? new TypeSystemImpl(null);
@@ -2085,15 +2149,20 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   }
 
   /**
-   * For each [Block], this method reports and error on all statements between the end of the
-   * block and the first return statement (assuming there it is not at the end of the block.)
-   *
-   * @param node the block to evaluate
+   * For each block, this method reports and error on all statements between the
+   * end of the block and the first return statement (assuming there it is not
+   * at the end of the block.)
    */
   @override
   Object visitBlock(Block node) {
     NodeList<Statement> statements = node.statements;
     _checkForDeadStatementsInNodeList(statements);
+    return null;
+  }
+
+  @override
+  Object visitBreakStatement(BreakStatement node) {
+    labelTracker?.recordUsage(node.label?.name);
     return null;
   }
 
@@ -2121,6 +2190,12 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
       }
     }
     return super.visitConditionalExpression(node);
+  }
+
+  @override
+  Object visitContinueStatement(ContinueStatement node) {
+    labelTracker?.recordUsage(node.label?.name);
+    return null;
   }
 
   @override
@@ -2184,6 +2259,17 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   }
 
   @override
+  Object visitLabeledStatement(LabeledStatement node) {
+    _pushLabels(node.labels);
+    try {
+      super.visitLabeledStatement(node);
+    } finally {
+      _popLabels();
+    }
+    return null;
+  }
+
+  @override
   Object visitSwitchCase(SwitchCase node) {
     _checkForDeadStatementsInNodeList(node.statements, allowMandated: true);
     return super.visitSwitchCase(node);
@@ -2193,6 +2279,21 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   Object visitSwitchDefault(SwitchDefault node) {
     _checkForDeadStatementsInNodeList(node.statements, allowMandated: true);
     return super.visitSwitchDefault(node);
+  }
+
+  @override
+  Object visitSwitchStatement(SwitchStatement node) {
+    List<Label> labels = <Label>[];
+    for (SwitchMember member in node.members) {
+      labels.addAll(member.labels);
+    }
+    _pushLabels(labels);
+    try {
+      super.visitSwitchStatement(node);
+    } finally {
+      _popLabels();
+    }
+    return null;
   }
 
   @override
@@ -2313,13 +2414,11 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   }
 
   /**
-   * Given some [NodeList] of [Statement]s, from either a [Block] or
-   * [SwitchMember], this loops through the list searching for dead statements.
-   *
-   * @param statements some ordered list of statements in a [Block] or [SwitchMember]
-   * @param allowMandated allow dead statements mandated by the language spec.
-   *            This allows for a final break, continue, return, or throw statement
-   *            at the end of a switch case, that are mandated by the language spec.
+   * Given some list of [statements], loop through the list searching for dead
+   * statements. If [allowMandated] is true, then allow dead statements that are
+   * mandated by the language spec. This allows for a final break, continue,
+   * return, or throw statement at the end of a switch case, that are mandated
+   * by the language spec.
    */
   void _checkForDeadStatementsInNodeList(NodeList<Statement> statements,
       {bool allowMandated: false}) {
@@ -2355,14 +2454,9 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   }
 
   /**
-   * Given some [Expression], this method returns [ValidResult.RESULT_TRUE] if it is
-   * `true`, [ValidResult.RESULT_FALSE] if it is `false`, or `null` if the
-   * expression is not a constant boolean value.
-   *
-   * @param expression the expression to evaluate
-   * @return [ValidResult.RESULT_TRUE] if it is `true`, [ValidResult.RESULT_FALSE]
-   *         if it is `false`, or `null` if the expression is not a constant boolean
-   *         value
+   * Given some [expression], return [ValidResult.RESULT_TRUE] if it is `true`,
+   * [ValidResult.RESULT_FALSE] if it is `false`, or `null` if the expression is
+   * not a constant boolean value.
    */
   EvaluationResultImpl _getConstantBooleanValue(Expression expression) {
     if (expression is BooleanLiteral) {
@@ -2389,10 +2483,7 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
   }
 
   /**
-   * Return `true` if and only if the passed expression is resolved to a constant variable.
-   *
-   * @param expression some conditional expression
-   * @return `true` if and only if the passed expression is resolved to a constant variable
+   * Return `true` if the given [expression] is resolved to a constant variable.
    */
   bool _isDebugConstant(Expression expression) {
     Element element = null;
@@ -2406,6 +2497,25 @@ class DeadCodeVerifier extends RecursiveAstVisitor<Object> {
       return variable != null && variable.isConst;
     }
     return false;
+  }
+
+  /**
+   * Exit the most recently entered label scope after reporting any labels that
+   * were not referenced within that scope.
+   */
+  void _popLabels() {
+    for (Label label in labelTracker.unusedLabels()) {
+      _errorReporter
+          .reportErrorForNode(HintCode.UNUSED_LABEL, label, [label.label.name]);
+    }
+    labelTracker = labelTracker.outerTracker;
+  }
+
+  /**
+   * Enter a new label scope in which the given [labels] are defined.
+   */
+  void _pushLabels(List<Label> labels) {
+    labelTracker = new _LabelTracker(labelTracker, labels);
   }
 }
 
@@ -2932,6 +3042,12 @@ class EnumMemberBuilder extends RecursiveAstVisitor<Object> {
     //
     valuesField.evaluationResult = new EvaluationResultImpl(
         new DartObjectImpl(valuesField.type, new ListState(constantValues)));
+    // Update toString() return type.
+    {
+      MethodElementImpl toStringMethod = enumElement.methods[0];
+      toStringMethod.returnType = _typeProvider.stringType;
+      toStringMethod.type = new FunctionTypeImpl(toStringMethod);
+    }
     //
     // Finish building the enum.
     //
@@ -3268,6 +3384,10 @@ class ExitDetector extends GeneralizingAstVisitor<bool> {
       if (node.operator.type == TokenType.QUESTION_PERIOD) {
         return false;
       }
+    }
+    Element element = node.methodName.staticElement;
+    if (element != null && element.isAlwaysThrows) {
+      return true;
     }
     return _nodeExits(node.argumentList);
   }
@@ -3914,8 +4034,9 @@ class ImportsVerifier {
           continue;
         }
       }
-      errorReporter.reportErrorForNode(
-          HintCode.UNUSED_IMPORT, unusedImport.uri);
+      StringLiteral uri = unusedImport.uri;
+      errorReporter
+          .reportErrorForNode(HintCode.UNUSED_IMPORT, uri, [uri.stringValue]);
     }
   }
 
@@ -4146,7 +4267,7 @@ class InferenceContext {
    * already has a context type. This recorded type will be the least upper
    * bound of all types added with [addReturnOrYieldType].
    */
-  void popReturnContext(BlockFunctionBody node) {
+  void popReturnContext(FunctionBody node) {
     if (_returnStack.isNotEmpty && _inferredReturn.isNotEmpty) {
       DartType context = _returnStack.removeLast() ?? DynamicTypeImpl.instance;
       DartType inferred = _inferredReturn.removeLast();
@@ -4162,7 +4283,7 @@ class InferenceContext {
   /**
    * Push a block function body's return type onto the return stack.
    */
-  void pushReturnContext(BlockFunctionBody node) {
+  void pushReturnContext(FunctionBody node) {
     _returnStack.add(getContext(node));
     _inferredReturn.add(_typeProvider.nullType);
   }
@@ -4727,6 +4848,12 @@ class ResolverVisitor extends ScopedVisitor {
   FunctionBody _currentFunctionBody;
 
   /**
+   * The type of the expression of the immediately enclosing [SwitchStatement],
+   * or `null` if not in a [SwitchStatement].
+   */
+  DartType _enclosingSwitchStatementExpressionType;
+
+  /**
    * Are we running in strong mode or not.
    */
   bool strongMode;
@@ -5175,6 +5302,8 @@ class ResolverVisitor extends ScopedVisitor {
     Expression leftOperand = node.leftOperand;
     Expression rightOperand = node.rightOperand;
     if (operatorType == TokenType.AMPERSAND_AMPERSAND) {
+      InferenceContext.setType(leftOperand, typeProvider.boolType);
+      InferenceContext.setType(rightOperand, typeProvider.boolType);
       leftOperand?.accept(this);
       if (rightOperand != null) {
         _overrideManager.enterScope();
@@ -5198,6 +5327,8 @@ class ResolverVisitor extends ScopedVisitor {
         }
       }
     } else if (operatorType == TokenType.BAR_BAR) {
+      InferenceContext.setType(leftOperand, typeProvider.boolType);
+      InferenceContext.setType(rightOperand, typeProvider.boolType);
       leftOperand?.accept(this);
       if (rightOperand != null) {
         _overrideManager.enterScope();
@@ -5495,6 +5626,7 @@ class ResolverVisitor extends ScopedVisitor {
   Object visitDoStatement(DoStatement node) {
     _overrideManager.enterScope();
     try {
+      InferenceContext.setType(node.condition, typeProvider.boolType);
       super.visitDoStatement(node);
     } finally {
       _overrideManager.exitScope();
@@ -5548,9 +5680,19 @@ class ResolverVisitor extends ScopedVisitor {
     _overrideManager.enterScope();
     try {
       InferenceContext.setTypeFromNode(node.expression, node);
+      inferenceContext.pushReturnContext(node);
       super.visitExpressionFunctionBody(node);
+
+      DartType type = node.expression.staticType;
+      if (_enclosingFunction.isAsynchronous) {
+        type = type.flattenFutures(typeSystem);
+      }
+      if (type != null) {
+        inferenceContext.addReturnOrYieldType(type);
+      }
     } finally {
       _overrideManager.exitScope();
+      inferenceContext.popReturnContext(node);
     }
     return null;
   }
@@ -5582,25 +5724,40 @@ class ResolverVisitor extends ScopedVisitor {
 
   @override
   void visitForEachStatementInScope(ForEachStatement node) {
+    Expression iterable = node.iterable;
+    DeclaredIdentifier loopVariable = node.loopVariable;
+    SimpleIdentifier identifier = node.identifier;
+
+    identifier?.accept(this);
+
+    DartType valueType;
+    if (loopVariable != null) {
+      TypeAnnotation typeAnnotation = loopVariable.type;
+      valueType = typeAnnotation?.type ?? UnknownInferredType.instance;
+    }
+    if (identifier != null) {
+      Element element = identifier.staticElement;
+      if (element is VariableElement) {
+        valueType = element.type;
+      } else if (element is PropertyAccessorElement) {
+        if (element.parameters.isNotEmpty) {
+          valueType = element.parameters[0].type;
+        }
+      }
+    }
+    if (valueType != null) {
+      InterfaceType targetType = (node.awaitKeyword == null)
+          ? typeProvider.iterableType
+          : typeProvider.streamType;
+      InferenceContext.setType(iterable, targetType.instantiate([valueType]));
+    }
+
     //
     // We visit the iterator before the loop variable because the loop variable
     // cannot be in scope while visiting the iterator.
     //
-    Expression iterable = node.iterable;
-    DeclaredIdentifier loopVariable = node.loopVariable;
-    SimpleIdentifier identifier = node.identifier;
-    if (loopVariable?.type?.type != null) {
-      InterfaceType targetType = (node.awaitKeyword == null)
-          ? typeProvider.iterableType
-          : typeProvider.streamType;
-      InferenceContext.setType(
-          iterable,
-          targetType
-              .instantiate([resolutionMap.typeForTypeName(loopVariable.type)]));
-    }
     iterable?.accept(this);
     loopVariable?.accept(this);
-    identifier?.accept(this);
     Statement body = node.body;
     if (body != null) {
       _overrideManager.enterScope();
@@ -5652,6 +5809,7 @@ class ResolverVisitor extends ScopedVisitor {
   void visitForStatementInScope(ForStatement node) {
     node.variables?.accept(this);
     node.initialization?.accept(this);
+    InferenceContext.setType(node.condition, typeProvider.boolType);
     node.condition?.accept(this);
     _overrideManager.enterScope();
     try {
@@ -5768,6 +5926,7 @@ class ResolverVisitor extends ScopedVisitor {
   @override
   Object visitIfStatement(IfStatement node) {
     Expression condition = node.condition;
+    InferenceContext.setType(condition, typeProvider.boolType);
     condition?.accept(this);
     Map<VariableElement, DartType> thenOverrides =
         const <VariableElement, DartType>{};
@@ -6032,6 +6191,8 @@ class ResolverVisitor extends ScopedVisitor {
   Object visitSwitchCase(SwitchCase node) {
     _overrideManager.enterScope();
     try {
+      InferenceContext.setType(
+          node.expression, _enclosingSwitchStatementExpressionType);
       super.visitSwitchCase(node);
     } finally {
       _overrideManager.exitScope();
@@ -6046,6 +6207,19 @@ class ResolverVisitor extends ScopedVisitor {
       super.visitSwitchDefault(node);
     } finally {
       _overrideManager.exitScope();
+    }
+    return null;
+  }
+
+  @override
+  Object visitSwitchStatementInScope(SwitchStatement node) {
+    var previousExpressionType = _enclosingSwitchStatementExpressionType;
+    try {
+      node.expression?.accept(this);
+      _enclosingSwitchStatementExpressionType = node.expression.staticType;
+      node.members.accept(this);
+    } finally {
+      _enclosingSwitchStatementExpressionType = previousExpressionType;
     }
     return null;
   }
@@ -6105,6 +6279,7 @@ class ResolverVisitor extends ScopedVisitor {
     try {
       _implicitLabelScope = _implicitLabelScope.nest(node);
       Expression condition = node.condition;
+      InferenceContext.setType(condition, typeProvider.boolType);
       condition?.accept(this);
       Statement body = node.body;
       if (body != null) {
@@ -6848,10 +7023,6 @@ class ResolverVisitor extends ScopedVisitor {
  * The abstract class `ScopedVisitor` maintains name and label scopes as an AST structure is
  * being visited.
  */
-/**
- * The abstract class `ScopedVisitor` maintains name and label scopes as an AST structure is
- * being visited.
- */
 abstract class ScopedVisitor extends UnifyingAstVisitor<Object> {
   /**
    * The element for the library containing the compilation unit being visited.
@@ -7501,12 +7672,16 @@ abstract class ScopedVisitor extends UnifyingAstVisitor<Object> {
               new LabelScope(labelScope, labelName.name, member, labelElement);
         }
       }
-      super.visitSwitchStatement(node);
+      visitSwitchStatementInScope(node);
     } finally {
       labelScope = outerScope;
       _implicitLabelScope = outerImplicitScope;
     }
     return null;
+  }
+
+  void visitSwitchStatementInScope(SwitchStatement node) {
+    super.visitSwitchStatement(node);
   }
 
   @override
@@ -10565,6 +10740,67 @@ class _ConstantVerifier_validateInitializerExpression extends ConstantVisitor {
       }
     }
     return super.visitSimpleIdentifier(node);
+  }
+}
+
+/**
+ * An object used to track the usage of labels within a single label scope.
+ */
+class _LabelTracker {
+  /**
+   * The tracker for the outer label scope.
+   */
+  final _LabelTracker outerTracker;
+
+  /**
+   * The labels whose usage is being tracked.
+   */
+  final List<Label> labels;
+
+  /**
+   * A list of flags corresponding to the list of [labels] indicating whether
+   * the corresponding label has been used.
+   */
+  List<bool> used;
+
+  /**
+   * A map from the names of labels to the index of the label in [labels].
+   */
+  final Map<String, int> labelMap = <String, int>{};
+
+  /**
+   * Initialize a newly created label tracker.
+   */
+  _LabelTracker(this.outerTracker, this.labels) {
+    used = new List.filled(labels.length, false);
+    for (int i = 0; i < labels.length; i++) {
+      labelMap[labels[i].label.name] = i;
+    }
+  }
+
+  /**
+   * Record that the label with the given [labelName] has been used.
+   */
+  void recordUsage(String labelName) {
+    if (labelName != null) {
+      int index = labelMap[labelName];
+      if (index != null) {
+        used[index] = true;
+      } else if (outerTracker != null) {
+        outerTracker.recordUsage(labelName);
+      }
+    }
+  }
+
+  /**
+   * Return the unused labels.
+   */
+  Iterable<Label> unusedLabels() sync* {
+    for (int i = 0; i < labels.length; i++) {
+      if (!used[i]) {
+        yield labels[i];
+      }
+    }
   }
 }
 

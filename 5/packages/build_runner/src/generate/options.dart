@@ -42,9 +42,6 @@ class BuildOptions {
   // For testing only, skips the build script updates check.
   bool skipBuildScriptCheck;
 
-  // For internal use only, flipped when a severe log occurred.
-  bool severeLogHandled = false;
-
   BuildOptions(BuildEnvironment environment,
       {@required this.packageGraph,
       BuildConfig rootPackageConfig,
@@ -57,6 +54,7 @@ class BuildOptions {
       this.outputDir,
       this.verbose}) {
     // Set up logging
+    verbose ??= false;
     logLevel ??= verbose ? Level.ALL : Level.INFO;
 
     // Invalid to have Level.OFF but want severe logs to fail the build.
@@ -66,12 +64,7 @@ class BuildOptions {
 
     Logger.root.level = logLevel;
 
-    logListener = Logger.root.onRecord.listen((r) {
-      if (r.level == Level.SEVERE) {
-        severeLogHandled = true;
-      }
-      environment.onLog(r);
-    });
+    logListener = Logger.root.onRecord.listen(environment.onLog);
 
     /// Set up other defaults.
     debounceDelay ??= const Duration(milliseconds: 250);
@@ -79,7 +72,6 @@ class BuildOptions {
     failOnSevere ??= false;
     skipBuildScriptCheck ??= false;
     enableLowResourcesMode ??= false;
-    verbose ??= false;
 
     if (rootPackageConfig == null ||
         (rootPackageConfig.buildTargets.length == 1 &&

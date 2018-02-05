@@ -21,7 +21,7 @@ StreamTransformer<T, T> merge<T>(Stream<T> other) => new _Merge<T>([other]);
 StreamTransformer<T, T> mergeAll<T>(List<Stream<T>> others) =>
     new _Merge<T>(others);
 
-class _Merge<T> implements StreamTransformer<T, T> {
+class _Merge<T> extends StreamTransformerBase<T, T> {
   final List<Stream<T>> _others;
 
   _Merge(this._others);
@@ -32,7 +32,7 @@ class _Merge<T> implements StreamTransformer<T, T> {
         ? new StreamController<T>.broadcast(sync: true)
         : new StreamController<T>(sync: true);
 
-    List<Stream<T>> allStreams = [first]..addAll(_others);
+    var allStreams = [first]..addAll(_others);
     if (first.isBroadcast) {
       allStreams = allStreams
           .map((s) => s.isBroadcast ? s : s.asBroadcastStream())

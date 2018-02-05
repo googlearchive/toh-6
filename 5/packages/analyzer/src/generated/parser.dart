@@ -210,6 +210,12 @@ class Parser {
   bool _enableNnbd = false;
 
   /**
+   * A flag indicating whether the parser should parse instance creation
+   * expressions that lack either the `new` or `const` keyword.
+   */
+  bool _enableOptionalNewAndConst = false;
+
+  /**
    * A flag indicating whether the parser is to allow URI's in part-of
    * directives.
    */
@@ -280,7 +286,7 @@ class Parser {
   factory Parser(Source source, AnalysisErrorListener errorListener,
       {bool useFasta}) {
     if ((useFasta ?? false) || Parser.useFasta) {
-      return new _Parser2(source, errorListener);
+      return new _Parser2(source, errorListener, allowNativeClause: true);
     } else {
       return new Parser.withoutFasta(source, errorListener);
     }
@@ -326,6 +332,20 @@ class Parser {
    */
   void set enableNnbd(bool enable) {
     _enableNnbd = enable;
+  }
+
+  /**
+   * Return `true` if the parser should parse instance creation expressions that
+   * lack either the `new` or `const` keyword.
+   */
+  bool get enableOptionalNewAndConst => _enableOptionalNewAndConst;
+
+  /**
+   * Set whether the parser should parse instance creation expressions that lack
+   * either the `new` or `const` keyword.
+   */
+  void set enableOptionalNewAndConst(bool enable) {
+    _enableOptionalNewAndConst = enable;
   }
 
   /**
@@ -541,7 +561,9 @@ class Parser {
    */
   bool isInitializedVariableDeclaration() {
     Keyword keyword = _currentToken.keyword;
-    if (keyword == Keyword.FINAL || keyword == Keyword.VAR) {
+    if (keyword == Keyword.FINAL ||
+        keyword == Keyword.VAR ||
+        keyword == Keyword.VOID) {
       // An expression cannot start with a keyword other than 'const',
       // 'rethrow', or 'throw'.
       return true;
@@ -4462,6 +4484,16 @@ class Parser {
             operand = astFactory.functionExpressionInvocation(
                 operand, typeArguments, argumentList);
           }
+        } else if (enableOptionalNewAndConst &&
+            operand is Identifier &&
+            _isLikelyNamedInstanceCreation()) {
+          TypeArgumentList typeArguments = _parseOptionalTypeArguments();
+          Token period = _expect(TokenType.PERIOD);
+          SimpleIdentifier name = parseSimpleIdentifier();
+          ArgumentList argumentList = parseArgumentList();
+          TypeName typeName = astFactory.typeName(operand, typeArguments);
+          operand = astFactory.instanceCreationExpression(null,
+              astFactory.constructorName(typeName, period, name), argumentList);
         } else {
           operand = parseAssignableSelector(operand, true);
         }
@@ -6251,6 +6283,24 @@ class Parser {
   }
 
   /**
+   * Return `true` if it looks like we have found the invocation of a named
+   * constructor following the name of the type:
+   * ```
+   * typeArguments? '.' identifier '('
+   * ```
+   */
+  bool _isLikelyNamedInstanceCreation() {
+    Token token = skipTypeArgumentList(_currentToken);
+    if (token != null && _tokenMatches(token, TokenType.PERIOD)) {
+      token = skipSimpleIdentifier(token.next);
+      if (token != null && _tokenMatches(token, TokenType.OPEN_PAREN)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Given that we have just found bracketed text within the given [comment],
    * look to see whether that text is (a) followed by a parenthesized link
    * address, (b) followed by a colon, or (c) followed by optional whitespace
@@ -6455,7 +6505,14 @@ class Parser {
     Expression message;
     if (_matches(TokenType.COMMA)) {
       comma = getAndAdvance();
-      message = parseExpression2();
+      if (_matches(TokenType.CLOSE_PAREN)) {
+        comma = null;
+      } else {
+        message = parseExpression2();
+        if (_matches(TokenType.COMMA)) {
+          getAndAdvance();
+        }
+      }
     }
     Token rightParen = _expect(TokenType.CLOSE_PAREN);
     return astFactory.assertInitializer(
@@ -7801,6 +7858,7 @@ class Parser {
     Parser parser = new Parser(_source, listener);
     parser._currentToken = _cloneTokens(startToken);
     parser._enableNnbd = _enableNnbd;
+    parser._enableOptionalNewAndConst = _enableOptionalNewAndConst;
     parser._inAsync = _inAsync;
     parser._inGenerator = _inGenerator;
     parser._inInitializer = _inInitializer;

@@ -140,8 +140,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void beginFactoryMethod(Token token) {
-    listener?.beginFactoryMethod(token);
+  void beginFactoryMethod(Token lastConsumed) {
+    listener?.beginFactoryMethod(lastConsumed);
   }
 
   @override
@@ -265,8 +265,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void beginMember(Token token) {
-    listener?.beginMember(token);
+  void beginMember() {
+    listener?.beginMember();
   }
 
   @override
@@ -280,8 +280,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void beginMethod(Token token, Token name) {
-    listener?.beginMethod(token, name);
+  void beginMethod() {
+    listener?.beginMethod();
   }
 
   @override
@@ -365,8 +365,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void beginTopLevelMethod(Token token, Token name) {
-    listener?.beginTopLevelMethod(token, name);
+  void beginTopLevelMethod(Token lastConsumed) {
+    listener?.beginTopLevelMethod(lastConsumed);
   }
 
   @override
@@ -911,8 +911,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void beginConditionalExpression() {
-    listener?.beginConditionalExpression();
+  void beginConditionalExpression(Token question) {
+    listener?.beginConditionalExpression(question);
   }
 
   @override
@@ -929,6 +929,11 @@ class ForwardingListener implements Listener {
   void handleContinueStatement(
       bool hasTarget, Token continueKeyword, Token endToken) {
     listener?.handleContinueStatement(hasTarget, continueKeyword, endToken);
+  }
+
+  @override
+  void handleDirectivesOnly() {
+    listener?.handleDirectivesOnly();
   }
 
   @override
@@ -990,6 +995,11 @@ class ForwardingListener implements Listener {
   void handleIndexedExpression(
       Token openSquareBracket, Token closeSquareBracket) {
     listener?.handleIndexedExpression(openSquareBracket, closeSquareBracket);
+  }
+
+  @override
+  void handleInterpolationExpression(Token leftBracket, Token rightBracket) {
+    listener?.handleInterpolationExpression(leftBracket, rightBracket);
   }
 
   @override
@@ -1140,8 +1150,8 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  void handleNoType(Token token) {
-    listener?.handleNoType(token);
+  void handleNoType(Token lastConsumed) {
+    listener?.handleNoType(lastConsumed);
   }
 
   @override
@@ -1187,11 +1197,6 @@ class ForwardingListener implements Listener {
   @override
   void handleRecoverClassHeader() {
     listener?.handleRecoverClassHeader();
-  }
-
-  @override
-  void handleRecoverExpression(Token token, Message message) {
-    listener?.handleRecoverExpression(token, message);
   }
 
   @override
@@ -1281,16 +1286,6 @@ class ForwardingListener implements Listener {
   }
 
   @override
-  Token injectGenericCommentTypeAssign(Token token) {
-    return listener?.injectGenericCommentTypeAssign(token);
-  }
-
-  @override
-  Token injectGenericCommentTypeList(Token token) {
-    return listener?.injectGenericCommentTypeList(token);
-  }
-
-  @override
   void logEvent(String name) {
     listener?.logEvent(name);
   }
@@ -1302,13 +1297,6 @@ class ForwardingListener implements Listener {
 
   @override
   List<ParserError> get recoverableErrors => listener?.recoverableErrors;
-
-  @override
-  Token replaceTokenWithGenericCommentTypeAssign(
-      Token tokenToStartReplacing, Token tokenWithComment) {
-    return listener?.replaceTokenWithGenericCommentTypeAssign(
-        tokenToStartReplacing, tokenWithComment);
-  }
 
   @override
   set suppressParseErrors(bool value) {

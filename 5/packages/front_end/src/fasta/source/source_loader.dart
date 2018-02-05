@@ -11,18 +11,26 @@ import 'dart:typed_data' show Uint8List;
 import 'package:front_end/src/fasta/type_inference/interface_resolver.dart'
     show InterfaceResolver;
 
-import 'package:kernel/ast.dart' show Arguments, Expression, Program;
+import 'package:kernel/ast.dart'
+    show
+        Arguments,
+        Class,
+        Expression,
+        Library,
+        LibraryDependency,
+        Program,
+        Supertype;
 
 import 'package:kernel/class_hierarchy.dart' show ClassHierarchy;
 
 import 'package:kernel/core_types.dart' show CoreTypes;
 
-import 'package:kernel/src/incremental_class_hierarchy.dart'
-    show IncrementalClassHierarchy;
+import 'package:kernel/type_environment.dart' show TypeEnvironment;
 
-import '../../../file_system.dart';
+import '../../api_prototype/file_system.dart';
 
-import '../../base/instrumentation.dart' show Instrumentation;
+import '../../base/instrumentation.dart'
+    show Instrumentation, InstrumentationValueLiteral;
 
 import '../builder/builder.dart'
     show
@@ -43,14 +51,21 @@ import '../export.dart' show Export;
 
 import '../fasta_codes.dart'
     show
+        LocatedMessage,
         Message,
+        SummaryTemplate,
+        Template,
+        templateAmbiguousSupertypes,
         templateCyclicClassHierarchy,
         templateExtendingEnum,
         templateExtendingRestricted,
         templateIllegalMixin,
         templateIllegalMixinDueToConstructors,
         templateIllegalMixinDueToConstructorsCause,
-        templateInternalProblemUriMissingScheme;
+        templateInternalProblemUriMissingScheme,
+        templateSourceOutlineSummary;
+
+import '../fasta_codes.dart' as fasta_codes;
 
 import '../kernel/kernel_shadow_ast.dart'
     show ShadowClass, ShadowTypeInferenceEngine;
@@ -103,6 +118,9 @@ class SourceLoader<L> extends Loader<L> {
   SourceLoader(this.fileSystem, this.includeComments, KernelTarget target)
       : super(target);
 
+  Template<SummaryTemplate> get outlineSummaryTemplate =>
+      templateSourceOutlineSummary;
+
   Future<Token> tokenize(SourceLibraryBuilder library,
       {bool suppressLexicalErrors: false}) async {
     Uri uri = library.fileUri;
@@ -128,12 +146,12 @@ class SourceLoader<L> extends Loader<L> {
         zeroTerminatedBytes.setRange(0, rawBytes.length, rawBytes);
         bytes = zeroTerminatedBytes;
         sourceBytes[uri] = bytes;
+        byteCount += rawBytes.length;
       } on FileSystemException catch (e) {
         return deprecated_inputError(uri, -1, e.message);
       }
     }
 
-    byteCount += bytes.length - 1;
     ScannerResult result = scan(bytes, includeComments: includeComments);
     Token token = result.tokens;
     if (!suppressLexicalErrors) {
@@ -199,12 +217,13 @@ class SourceLoader<L> extends Loader<L> {
   void resolveParts() {
     List<Uri> parts = <Uri>[];
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
-        if (library.isPart) {
-          library.validatePart();
+      if (library.loader == this) {
+        SourceLibraryBuilder sourceLibrary = library;
+        if (sourceLibrary.isPart) {
+          sourceLibrary.validatePart();
           parts.add(uri);
         } else {
-          library.includeParts();
+          sourceLibrary.includeParts();
         }
       }
     });
@@ -212,7 +231,7 @@ class SourceLoader<L> extends Loader<L> {
     ticker.logMs("Resolved parts");
 
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
+      if (library.loader == this) {
         library.applyPatches();
       }
     });
@@ -223,8 +242,9 @@ class SourceLoader<L> extends Loader<L> {
     Set<LibraryBuilder> exporters = new Set<LibraryBuilder>();
     Set<LibraryBuilder> exportees = new Set<LibraryBuilder>();
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
-        library.buildInitialScopes();
+      if (library.loader == this) {
+        SourceLibraryBuilder sourceLibrary = library;
+        sourceLibrary.buildInitialScopes();
       }
       if (library.exporters.isNotEmpty) {
         exportees.add(library);
@@ -256,10 +276,18 @@ class SourceLoader<L> extends Loader<L> {
       }
     } while (wasChanged);
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
-        library.addImportsToScope();
+      if (library.loader == this) {
+        SourceLibraryBuilder sourceLibrary = library;
+        sourceLibrary.addImportsToScope();
       }
     });
+    for (LibraryBuilder exportee in exportees) {
+      // TODO(ahe): Change how we track exporters. Currently, when a library
+      // (exporter) exports another library (exportee) we add a reference to
+      // exporter to exportee. This creates a reference in the wrong direction
+      // and can lead to memory leaks.
+      exportee.exporters.clear();
+    }
     ticker.logMs("Computed library scopes");
     // debugPrintExports();
   }
@@ -304,23 +332,19 @@ class SourceLoader<L> extends Loader<L> {
   void finishDeferredLoadTearoffs() {
     int count = 0;
     builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.finishDeferredLoadTearoffs();
+      if (library.loader == this) {
+        count += library.finishDeferredLoadTearoffs();
+      }
     });
     ticker.logMs("Finished deferred load tearoffs $count");
-  }
-
-  void finishStaticInvocations() {
-    int count = 0;
-    builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.finishStaticInvocations();
-    });
-    ticker.logMs("Finished static invocations $count");
   }
 
   void resolveConstructors() {
     int count = 0;
     builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.resolveConstructors(null);
+      if (library.loader == this) {
+        count += library.resolveConstructors(null);
+      }
     });
     ticker.logMs("Resolved $count constructors");
   }
@@ -328,15 +352,29 @@ class SourceLoader<L> extends Loader<L> {
   void finishTypeVariables(ClassBuilder object) {
     int count = 0;
     builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.finishTypeVariables(object);
+      if (library.loader == this) {
+        count += library.finishTypeVariables(object);
+      }
     });
     ticker.logMs("Resolved $count type-variable bounds");
+  }
+
+  void instantiateToBound(TypeBuilder dynamicType, ClassBuilder objectClass) {
+    int count = 0;
+    builders.forEach((Uri uri, LibraryBuilder library) {
+      if (library.loader == this) {
+        count += library.instantiateToBound(dynamicType, objectClass);
+      }
+    });
+    ticker.logMs("Instantiated $count type variables to their bounds");
   }
 
   void finishNativeMethods() {
     int count = 0;
     builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.finishNativeMethods();
+      if (library.loader == this) {
+        count += library.finishNativeMethods();
+      }
     });
     ticker.logMs("Finished $count native methods");
   }
@@ -344,7 +382,9 @@ class SourceLoader<L> extends Loader<L> {
   void finishPatchMethods() {
     int count = 0;
     builders.forEach((Uri uri, LibraryBuilder library) {
-      count += library.finishPatchMethods();
+      if (library.loader == this) {
+        count += library.finishPatchMethods();
+      }
     });
     ticker.logMs("Finished $count patch methods");
   }
@@ -400,36 +440,49 @@ class SourceLoader<L> extends Loader<L> {
     return output;
   }
 
-  void checkSemantics() {
-    List<ClassBuilder> allClasses = target.collectAllClasses();
-    Iterable<ClassBuilder> candidates = cyclicCandidates(allClasses);
-    Map<ClassBuilder, Set<ClassBuilder>> realCycles =
-        <ClassBuilder, Set<ClassBuilder>>{};
-    for (ClassBuilder cls in candidates) {
-      Set<ClassBuilder> cycles = cyclicCandidates(allSupertypes(cls));
-      if (cycles.isNotEmpty) {
-        realCycles[cls] = cycles;
+  void checkSemantics(List<SourceClassBuilder> classes) {
+    Iterable<ClassBuilder> candidates = cyclicCandidates(classes);
+    if (candidates.isNotEmpty) {
+      Map<ClassBuilder, Set<ClassBuilder>> realCycles =
+          <ClassBuilder, Set<ClassBuilder>>{};
+      for (ClassBuilder cls in candidates) {
+        Set<ClassBuilder> cycles = cyclicCandidates(allSupertypes(cls));
+        if (cycles.isNotEmpty) {
+          realCycles[cls] = cycles;
+        }
       }
-    }
-    Set<ClassBuilder> reported = new Set<ClassBuilder>();
-    realCycles.forEach((ClassBuilder cls, Set<ClassBuilder> cycles) {
-      target.breakCycle(cls);
-      if (reported.add(cls)) {
+      Map<LocatedMessage, ClassBuilder> messages =
+          <LocatedMessage, ClassBuilder>{};
+      realCycles.forEach((ClassBuilder cls, Set<ClassBuilder> cycles) {
+        target.breakCycle(cls);
         List<ClassBuilder> involved = <ClassBuilder>[];
         for (ClassBuilder cls in cycles) {
           if (realCycles.containsKey(cls)) {
             involved.add(cls);
-            reported.add(cls);
           }
         }
-        String involvedString =
-            involved.map((c) => c.fullNameForErrors).join("', '");
-        cls.addCompileTimeError(
-            templateCyclicClassHierarchy.withArguments(
-                cls.fullNameForErrors, involvedString),
-            cls.charOffset);
+        // Sort the class names alphabetically to ensure the order is stable.
+        // TODO(ahe): It's possible that a better UX would be to sort the
+        // classes based on walking the class hierarchy in breadth-first order.
+        String involvedString = (involved
+                .where((c) => c != cls)
+                .map((c) => c.fullNameForErrors)
+                .toList()
+                  ..sort())
+            .join("', '");
+        messages[templateCyclicClassHierarchy
+            .withArguments(cls.fullNameForErrors, involvedString)
+            .withLocation(cls.fileUri, cls.charOffset)] = cls;
+      });
+
+      // Report all classes involved in a cycle, sorted to ensure stability as
+      // [cyclicCandidates] is sensitive to if the platform (or other modules)
+      // are included in [classes].
+      for (LocatedMessage message in messages.keys.toList()..sort()) {
+        messages[message]
+            .addCompileTimeError(message.messageObject, message.charOffset);
       }
-    });
+    }
     ticker.logMs("Found cycles");
     Set<ClassBuilder> blackListedClasses = new Set<ClassBuilder>.from([
       coreLibrary["bool"],
@@ -437,8 +490,9 @@ class SourceLoader<L> extends Loader<L> {
       coreLibrary["num"],
       coreLibrary["double"],
       coreLibrary["String"],
+      coreLibrary["Null"],
     ]);
-    for (ClassBuilder cls in allClasses) {
+    for (ClassBuilder cls in classes) {
       if (cls.library.loader != this) continue;
       Set<ClassBuilder> directSupertypes = new Set<ClassBuilder>();
       target.addDirectSupertype(cls, directSupertypes);
@@ -487,8 +541,9 @@ class SourceLoader<L> extends Loader<L> {
 
   void buildProgram() {
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
-        L target = library.build(coreLibrary);
+      if (library.loader == this) {
+        SourceLibraryBuilder sourceLibrary = library;
+        L target = sourceLibrary.build(coreLibrary);
         if (!library.isPatch) {
           libraries.add(target);
         }
@@ -497,9 +552,60 @@ class SourceLoader<L> extends Loader<L> {
     ticker.logMs("Built program");
   }
 
-  void computeHierarchy(Program program) {
-    hierarchy = new IncrementalClassHierarchy();
+  Program computeFullProgram() {
+    Set<Library> libraries = new Set<Library>();
+    List<Library> workList = <Library>[];
+    builders.forEach((Uri uri, LibraryBuilder library) {
+      if (!library.isPart && !library.isPatch) {
+        if (libraries.add(library.target)) {
+          workList.add(library.target);
+        }
+      }
+    });
+    while (workList.isNotEmpty) {
+      Library library = workList.removeLast();
+      for (LibraryDependency dependency in library.dependencies) {
+        if (libraries.add(dependency.targetLibrary)) {
+          workList.add(dependency.targetLibrary);
+        }
+      }
+    }
+    return new Program()..libraries.addAll(libraries);
+  }
+
+  void computeHierarchy() {
+    List<List> ambiguousTypesRecords = [];
+    hierarchy = new ClassHierarchy(computeFullProgram(),
+        onAmbiguousSupertypes: (Class cls, Supertype a, Supertype b) {
+      if (ambiguousTypesRecords != null) {
+        ambiguousTypesRecords.add([cls, a, b]);
+      }
+    });
+    for (List record in ambiguousTypesRecords) {
+      handleAmbiguousSupertypes(record[0], record[1], record[2]);
+    }
+    ambiguousTypesRecords = null;
     ticker.logMs("Computed class hierarchy");
+  }
+
+  void handleAmbiguousSupertypes(Class cls, Supertype a, Supertype b) {
+    String name = cls.name;
+    TypeEnvironment env = new TypeEnvironment(coreTypes, hierarchy,
+        strongMode: target.strongMode);
+
+    if (cls.isSyntheticMixinImplementation) return;
+
+    if (env.isSubtypeOf(a.asInterfaceType, b.asInterfaceType)) return;
+    addProblem(
+        templateAmbiguousSupertypes.withArguments(
+            name, a.asInterfaceType, b.asInterfaceType),
+        cls.fileOffset,
+        cls.fileUri);
+  }
+
+  void ignoreAmbiguousSupertypes(Class cls, Supertype a, Supertype b) {}
+
+  void computeCoreTypes(Program program) {
     coreTypes = new CoreTypes(program);
     ticker.logMs("Computed core types");
   }
@@ -507,7 +613,10 @@ class SourceLoader<L> extends Loader<L> {
   void checkOverrides(List<SourceClassBuilder> sourceClasses) {
     assert(hierarchy != null);
     for (SourceClassBuilder builder in sourceClasses) {
-      builder.checkOverrides(hierarchy);
+      if (builder.library.loader == this) {
+        builder.checkOverrides(
+            hierarchy, typeInferenceEngine?.typeSchemaEnvironment);
+      }
     }
     ticker.logMs("Checked overrides");
   }
@@ -529,7 +638,7 @@ class SourceLoader<L> extends Loader<L> {
         instrumentation,
         target.strongMode);
     builders.forEach((Uri uri, LibraryBuilder library) {
-      if (library is SourceLibraryBuilder) {
+      if (library.loader == this) {
         library.prepareTopLevelInference(library, null);
       }
     });
@@ -564,7 +673,7 @@ class SourceLoader<L> extends Loader<L> {
     typeInferenceEngine.finishTopLevelInitializingFormals();
     if (instrumentation != null) {
       builders.forEach((Uri uri, LibraryBuilder library) {
-        if (library is SourceLibraryBuilder) {
+        if (library.loader == this) {
           library.instrumentTopLevelInference(instrumentation);
         }
       });
@@ -575,8 +684,9 @@ class SourceLoader<L> extends Loader<L> {
     // target those forwarding stubs.
     // TODO(paulberry): could we make this unnecessary by not clearing class
     // inference info?
-    typeInferenceEngine.classHierarchy =
-        hierarchy = new IncrementalClassHierarchy();
+    typeInferenceEngine.classHierarchy = hierarchy = new ClassHierarchy(
+        computeFullProgram(),
+        onAmbiguousSupertypes: ignoreAmbiguousSupertypes);
     ticker.logMs("Performed top level inference");
   }
 
@@ -622,5 +732,58 @@ class SourceLoader<L> extends Loader<L> {
     String text = target.context
         .format(message.withLocation(uri, offset), Severity.error);
     return target.backendTarget.buildCompileTimeError(coreTypes, text, offset);
+  }
+
+  void recordMessage(
+      Severity severity, Message message, int charOffset, Uri fileUri,
+      {LocatedMessage context}) {
+    if (instrumentation == null) return;
+
+    if (charOffset == -1 &&
+        (severity == Severity.nit ||
+            message.code == fasta_codes.codeConstConstructorWithBody ||
+            message.code == fasta_codes.codeConstructorNotFound ||
+            message.code == fasta_codes.codeSuperclassHasNoDefaultConstructor ||
+            message.code == fasta_codes.codeTypeArgumentsOnTypeVariable ||
+            message.code == fasta_codes.codeUnspecified)) {
+      // TODO(ahe): All warnings should have a charOffset, but currently, some
+      // warnings lack them.
+      return;
+    }
+
+    String severityString;
+    switch (severity) {
+      case Severity.error:
+        severityString = "error";
+        break;
+
+      case Severity.internalProblem:
+        severityString = "internal problem";
+        break;
+
+      case Severity.nit:
+        severityString = "nit";
+        break;
+
+      case Severity.warning:
+        severityString = "warning";
+        break;
+
+      case Severity.errorLegacyWarning:
+        // Should have been resolved to either error or warning at this point.
+        // Use a property name expressing that, in case it slips through.
+        severityString = "unresolved severity";
+        break;
+    }
+    instrumentation.record(
+        fileUri,
+        charOffset,
+        severityString,
+        // TODO(ahe): Should I add an InstrumentationValue for Message?
+        new InstrumentationValueLiteral(message.code.name));
+    if (context != null) {
+      instrumentation.record(context.uri, context.charOffset, "context",
+          new InstrumentationValueLiteral(context.code.name));
+    }
   }
 }

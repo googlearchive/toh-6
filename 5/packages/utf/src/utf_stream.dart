@@ -10,15 +10,15 @@ import 'constants.dart';
 import 'util.dart';
 
 // TODO(floitsch): make this transformer reusable.
-abstract class _StringDecoder
-    implements StreamTransformer<List<int>, String>, EventSink<List<int>> {
+abstract class _StringDecoder extends StreamTransformerBase<List<int>, String>
+    implements EventSink<List<int>> {
   List<int> _carry;
   List<int> _buffer;
   int _replacementChar;
 
   EventSink<String> _outSink;
 
-  _StringDecoder(int this._replacementChar);
+  _StringDecoder(this._replacementChar);
 
   Stream<String> bind(Stream<List<int>> stream) {
     return new Stream<String>.eventTransformed(stream,
@@ -52,6 +52,7 @@ abstract class _StringDecoder
           }
           return null;
         }
+
         int consumed = _processBytes(getNext);
         if (consumed > 0) {
           goodChars = _buffer.length;
@@ -108,6 +109,7 @@ abstract class _StringDecoder
         throw new ArgumentError('Invalid codepoint');
       }
     }
+
     if (char < 0) error();
     if (char >= 0xD800 && char <= 0xDFFF) error();
     if (char > 0x10FFFF) error();
@@ -176,8 +178,8 @@ class Utf8DecoderTransformer extends _StringDecoder {
   }
 }
 
-abstract class _StringEncoder
-    implements StreamTransformer<String, List<int>>, EventSink<String> {
+abstract class _StringEncoder extends StreamTransformerBase<String, List<int>>
+    implements EventSink<String> {
   EventSink<List<int>> _outSink;
 
   Stream<List<int>> bind(Stream<String> stream) {

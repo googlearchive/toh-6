@@ -21,6 +21,7 @@ import '../asset_graph/node.dart';
 import '../environment/build_environment.dart';
 import '../environment/io_environment.dart';
 import '../environment/overridable_environment.dart';
+import '../logging/logging.dart';
 import '../package_graph/apply_builders.dart';
 import '../package_graph/build_config_overrides.dart';
 import '../package_graph/package_graph.dart';
@@ -42,6 +43,7 @@ Future<ServeHandler> watch(
   bool deleteFilesByDefault,
   bool failOnSevere,
   bool assumeTty,
+  String configKey,
   PackageGraph packageGraph,
   RunnerAssetReader reader,
   RunnerAssetWriter writer,
@@ -55,8 +57,12 @@ Future<ServeHandler> watch(
   Map<String, BuildConfig> overrideBuildConfig,
   String outputDir,
   bool verbose,
+  Map<String, Map<String, dynamic>> builderConfigOverrides,
 }) async {
+  builderConfigOverrides ??= const {};
   packageGraph ??= new PackageGraph.forThisPackage();
+  overrideBuildConfig ??=
+      await findBuildConfigOverrides(packageGraph, configKey);
   final targetGraph = await TargetGraph.forPackageGraph(packageGraph,
       overrideBuildConfig: overrideBuildConfig);
   var environment = new OverrideableEnvironment(
@@ -78,8 +84,8 @@ Future<ServeHandler> watch(
       verbose: verbose);
   var terminator = new Terminator(terminateEventStream);
 
-  overrideBuildConfig ??= await findBuildConfigOverrides(options.packageGraph);
-  final buildActions = await createBuildActions(targetGraph, builders);
+  final buildActions =
+      await createBuildActions(targetGraph, builders, builderConfigOverrides);
 
   var watch =
       runWatch(environment, options, buildActions, terminator.shouldTerminate);
@@ -131,8 +137,8 @@ class WatchImpl implements BuildState {
   /// Pending expected delete events from the build.
   final Set<AssetId> _expectedDeletes = new Set<AssetId>();
 
-  final _readerCompleter = new Completer<DigestAssetReader>();
-  Future<DigestAssetReader> get reader => _readerCompleter.future;
+  final _readerCompleter = new Completer<AssetReader>();
+  Future<AssetReader> get reader => _readerCompleter.future;
 
   WatchImpl(
       BuildEnvironment environment,
@@ -168,6 +174,7 @@ class WatchImpl implements BuildState {
 
     Future<BuildResult> doBuild(List<List<AssetChange>> changes) async {
       assert(build != null);
+      _logger.info('\nStarting Build');
       var mergedChanges = _collectChanges(changes);
 
       _expectedDeletes.clear();
@@ -190,10 +197,11 @@ class WatchImpl implements BuildState {
     final rootPackagesId = new AssetId(packageGraph.root.name, '.packages');
 
     // Start watching files immediately, before the first build is even started.
-    new PackageGraphWatcher(packageGraph,
-            logger: _logger,
-            watch: (node) =>
-                new PackageNodeWatcher(node, watch: _directoryWatcherFactory))
+    var graphWatcher = new PackageGraphWatcher(packageGraph,
+        logger: _logger,
+        watch: (node) =>
+            new PackageNodeWatcher(node, watch: _directoryWatcherFactory));
+    graphWatcher
         .watch()
         .asyncMap<AssetChange>((change) {
           // Delay any events until the first build is completed.
@@ -219,17 +227,6 @@ class WatchImpl implements BuildState {
         .transform(asyncMapBuffer(_recordCurrentBuild(doBuild)))
         .listen((BuildResult result) {
           if (controller.isClosed) return;
-          if (result.status != BuildStatus.failure &&
-              options.failOnSevere &&
-              options.severeLogHandled) {
-            options.severeLogHandled = false;
-            result = new BuildResult(
-              BuildStatus.failure,
-              result.outputs,
-              exception: 'A severe log was handled. See log for details',
-              performance: result.performance,
-            );
-          }
           controller.add(result);
         })
         .onDone(() async {
@@ -242,9 +239,10 @@ class WatchImpl implements BuildState {
     // Schedule the actual first build for the future so we can return the
     // stream synchronously.
     () async {
+      await logTimedAsync(_logger, 'Waiting for all file watchers to be ready',
+          () => graphWatcher.ready);
       originalRootPackagesDigest =
           md5.convert(await environment.reader.readAsBytes(rootPackagesId));
-
       _buildDefinition = await BuildDefinition.prepareWorkspace(
           environment, options, buildActions,
           onDelete: _expectedDeletes.add);
@@ -252,6 +250,7 @@ class WatchImpl implements BuildState {
           _buildDefinition.reader,
           _buildDefinition.assetGraph,
           buildActions.length,
+          true,
           packageGraph.root.name,
           null));
       _assetGraph = _buildDefinition.assetGraph;
@@ -306,7 +305,7 @@ class WatchImpl implements BuildState {
 
 Map<AssetId, ChangeType> _collectChanges(List<List<AssetChange>> changes) {
   var changeMap = <AssetId, ChangeType>{};
-  for (var change in changes.expand((l) => l)) {
+  for (AssetChange change in changes.expand((l) => l)) {
     var originalChangeType = changeMap[change.id];
     if (originalChangeType != null) {
       switch (originalChangeType) {

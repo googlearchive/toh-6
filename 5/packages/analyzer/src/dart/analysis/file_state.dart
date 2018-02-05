@@ -27,7 +27,7 @@ import 'package:analyzer/src/summary/package_bundle_reader.dart';
 import 'package:analyzer/src/summary/summarize_ast.dart';
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
-import 'package:front_end/byte_store.dart';
+import 'package:front_end/src/api_prototype/byte_store.dart';
 import 'package:front_end/src/base/api_signature.dart';
 import 'package:front_end/src/base/performance_logger.dart';
 import 'package:front_end/src/fasta/scanner/token.dart';
@@ -95,6 +95,11 @@ class FileState {
   final Uri uri;
 
   /**
+   * The absolute file URI of the file.
+   */
+  final Uri fileUri;
+
+  /**
    * The [Source] of the file with the [uri].
    */
   final Source source;
@@ -137,12 +142,13 @@ class FileState {
    */
   bool hasErrorOrWarning = false;
 
-  FileState._(this._fsState, this.path, this.uri, this.source)
+  FileState._(this._fsState, this.path, this.uri, this.fileUri, this.source)
       : isInExternalSummaries = false;
 
   FileState._external(this._fsState, this.uri)
       : isInExternalSummaries = true,
         path = null,
+        fileUri = null,
         source = null {
     _apiSignature = new Uint8List(16);
   }
@@ -592,6 +598,7 @@ class FileState {
 
     bool useFasta = analysisOptions.useFastaParser;
     Parser parser = new Parser(source, errorListener, useFasta: useFasta);
+    parser.enableOptionalNewAndConst = analysisOptions.previewDart2;
     parser.parseGenericMethodComments = analysisOptions.strongMode;
     CompilationUnit unit = parser.parseCompilationUnit(token);
     unit.lineInfo = lineInfo;
@@ -729,7 +736,7 @@ class FileSystemState {
    */
   FileState get unresolvedFile {
     if (_unresolvedFile == null) {
-      _unresolvedFile = new FileState._(this, null, null, null);
+      _unresolvedFile = new FileState._(this, null, null, null, null);
       _unresolvedFile.refresh();
     }
     return _unresolvedFile;
@@ -756,8 +763,9 @@ class FileSystemState {
         return file;
       }
       // Create a new file.
+      Uri fileUri = _resourceProvider.pathContext.toUri(path);
       FileSource uriSource = new FileSource(resource, uri);
-      file = new FileState._(this, path, uri, uriSource);
+      file = new FileState._(this, path, uri, fileUri, uriSource);
       _uriToFile[uri] = file;
       _addFileWithPath(path, file);
       _pathToCanonicalFile[path] = file;
@@ -778,7 +786,7 @@ class FileSystemState {
       // We are given all required unlinked and linked summaries for it.
       if (externalSummaries != null) {
         String uriStr = uri.toString();
-        if (externalSummaries.hasUnlinkedUnit(uriStr)) {
+        if (externalSummaries.hasLinkedLibrary(uriStr)) {
           file = new FileState._external(this, uri);
           _uriToFile[uri] = file;
           return file;
@@ -796,8 +804,9 @@ class FileSystemState {
 
       String path = uriSource.fullName;
       File resource = _resourceProvider.getFile(path);
+      Uri fileUri = _resourceProvider.pathContext.toUri(path);
       FileSource source = new FileSource(resource, uri);
-      file = new FileState._(this, path, uri, source);
+      file = new FileState._(this, path, uri, fileUri, source);
       _uriToFile[uri] = file;
       _addFileWithPath(path, file);
       file.refresh();

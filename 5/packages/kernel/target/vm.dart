@@ -3,6 +3,9 @@
 // BSD-style license that can be found in the LICENSE file.
 library kernel.target.vm;
 
+// ignore: UNDEFINED_HIDDEN_NAME
+import 'dart:core' hide MapEntry;
+
 import '../ast.dart';
 import '../class_hierarchy.dart';
 import '../core_types.dart';
@@ -11,10 +14,7 @@ import '../transformations/mixin_full_resolution.dart' as transformMixins
     show transformLibraries;
 import '../transformations/continuation.dart' as transformAsync
     show transformLibraries;
-import '../transformations/precompiler.dart' as transformPrecompiler
-    show transformProgram;
 
-import 'implementation_option.dart' show VmOptions;
 import 'targets.dart';
 
 /// Specializes the kernel IR to the Dart VM.
@@ -25,12 +25,6 @@ class VmTarget extends Target {
 
   @override
   bool get strongMode => flags.strongMode;
-
-  /// The VM patch files are not strong mode clean, so we adopt a hybrid mode
-  /// where the SDK is internally unchecked, but trusted to satisfy the types
-  /// declared on its interface.
-  @override
-  bool get strongModeSdk => false;
 
   @override
   String get name => 'vm';
@@ -58,6 +52,7 @@ class VmTarget extends Target {
         'dart:_builtin',
         'dart:nativewrappers',
         'dart:io',
+        'dart:cli',
       ];
 
   @override
@@ -69,19 +64,13 @@ class VmTarget extends Target {
     logger?.call("Transformed mixin applications");
 
     // TODO(kmillikin): Make this run on a per-method basis.
-    transformAsync.transformLibraries(coreTypes, libraries);
+    transformAsync.transformLibraries(coreTypes, libraries, flags.syncAsync);
     logger?.call("Transformed async methods");
   }
 
   @override
   void performGlobalTransformations(CoreTypes coreTypes, Program program,
-      {void logger(String msg)}) {
-    if (strongMode &&
-        (flags.implementationOptions != null) &&
-        flags.implementationOptions.contains(VmOptions.strongAOT)) {
-      transformPrecompiler.transformProgram(coreTypes, program);
-    }
-  }
+      {void logger(String msg)}) {}
 
   @override
   Expression instantiateInvocation(CoreTypes coreTypes, Expression receiver,
@@ -99,9 +88,11 @@ class VmTarget extends Target {
         new Arguments(<Expression>[
           new StringLiteral(name)..fileOffset = offset,
           _fixedLengthList(
+              coreTypes.typeClass.rawType,
               arguments.types.map((t) => new TypeLiteral(t)).toList(),
               arguments.fileOffset),
-          _fixedLengthList(arguments.positional, arguments.fileOffset),
+          _fixedLengthList(
+              const DynamicType(), arguments.positional, arguments.fileOffset),
           new StaticInvocation(
               coreTypes.mapUnmodifiable,
               new Arguments([
@@ -111,7 +102,7 @@ class VmTarget extends Target {
                       new SymbolLiteral(arg.name)..fileOffset = arg.fileOffset,
                       arg.value)
                     ..fileOffset = arg.fileOffset;
-                })))
+                })), keyType: coreTypes.symbolClass.rawType)
                   ..isConst = (arguments.named.length == 0)
                   ..fileOffset = arguments.fileOffset
               ]))
@@ -155,9 +146,11 @@ class VmTarget extends Target {
                 new SymbolLiteral(name)..fileOffset = offset,
                 new IntLiteral(type)..fileOffset = offset,
                 _fixedLengthList(
+                    coreTypes.typeClass.rawType,
                     arguments.types.map((t) => new TypeLiteral(t)).toList(),
                     arguments.fileOffset),
-                _fixedLengthList(arguments.positional, arguments.fileOffset),
+                _fixedLengthList(const DynamicType(), arguments.positional,
+                    arguments.fileOffset),
                 new StaticInvocation(
                     coreTypes.mapUnmodifiable,
                     new Arguments([
@@ -168,11 +161,11 @@ class VmTarget extends Target {
                               ..fileOffset = arg.fileOffset,
                             arg.value)
                           ..fileOffset = arg.fileOffset;
-                      })))
+                      })), keyType: coreTypes.symbolClass.rawType)
                         ..isConst = (arguments.named.length == 0)
                         ..fileOffset = arguments.fileOffset
                     ], types: [
-                      new DynamicType(),
+                      coreTypes.symbolClass.rawType,
                       new DynamicType()
                     ]))
                   ..fileOffset = offset
@@ -249,7 +242,8 @@ class VmTarget extends Target {
     return type;
   }
 
-  Expression _fixedLengthList(List<Expression> elements, int offset) {
+  Expression _fixedLengthList(
+      DartType typeArgument, List<Expression> elements, int offset) {
     // TODO(ahe): It's possible that it would be better to create a fixed-length
     // list first, and then populate it. That would create fewer objects. But as
     // this is currently only used in (statically resolved) no-such-method
@@ -257,11 +251,12 @@ class VmTarget extends Target {
 
     // The 0-element list must be exactly 'const[]'.
     if (elements.length == 0) {
-      return new ListLiteral([])..isConst = true;
+      return new ListLiteral([], typeArgument: typeArgument)..isConst = true;
     }
 
     return new MethodInvocation(
-        new ListLiteral(elements)..fileOffset = offset,
+        new ListLiteral(elements, typeArgument: typeArgument)
+          ..fileOffset = offset,
         new Name("toList"),
         new Arguments(<Expression>[], named: <NamedExpression>[
           new NamedExpression("growable", new BoolLiteral(false))

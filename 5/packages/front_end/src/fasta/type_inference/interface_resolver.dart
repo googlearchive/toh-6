@@ -3,7 +3,10 @@
 // BSD-style license that can be found in the LICENSE.md file.
 
 import 'package:front_end/src/base/instrumentation.dart';
+import 'package:front_end/src/fasta/builder/library_builder.dart';
 import 'package:front_end/src/fasta/kernel/kernel_shadow_ast.dart';
+import 'package:front_end/src/fasta/messages.dart';
+import 'package:front_end/src/fasta/names.dart';
 import 'package:front_end/src/fasta/problems.dart';
 import 'package:front_end/src/fasta/type_inference/type_inference_engine.dart';
 import 'package:front_end/src/fasta/type_inference/type_inferrer.dart';
@@ -29,17 +32,43 @@ typedef void _CovarianceFix(FunctionNode function);
 /// Concrete class derived from [InferenceNode] to represent type inference of
 /// getters, setters, and fields based on inheritance.
 class AccessorInferenceNode extends MemberInferenceNode {
-  AccessorInferenceNode(InterfaceResolver interfaceResolver,
-      Procedure declaredMethod, List<Member> candidates, int start, int end)
-      : super(interfaceResolver, declaredMethod, candidates, start, end);
+  AccessorInferenceNode(
+      InterfaceResolver interfaceResolver,
+      Procedure declaredMethod,
+      List<Member> candidates,
+      int start,
+      int end,
+      LibraryBuilder library,
+      Uri fileUri)
+      : super(interfaceResolver, declaredMethod, candidates, start, end,
+            library, fileUri);
+
+  String get _name {
+    if (_declaredMethod is! SyntheticAccessor && _declaredMethod.isSetter) {
+      return _declaredMethod.function.positionalParameters[0].name;
+    }
+    return _declaredMethod.name.name;
+  }
+
+  int get _offset {
+    if (_declaredMethod is! SyntheticAccessor && _declaredMethod.isSetter) {
+      return _declaredMethod.function.positionalParameters[0].fileOffset;
+    }
+    return _declaredMethod.fileOffset;
+  }
 
   @override
   void resolveInternal() {
     var declaredMethod = _declaredMethod;
     var kind = declaredMethod.kind;
     var overriddenTypes = _computeAccessorOverriddenTypes();
-    if (!isCircular) {
-      var inferredType = _matchTypes(overriddenTypes);
+    if (isCircular) {
+      _library.addCompileTimeError(
+          templateCantInferTypeDueToCircularity.withArguments(_name),
+          _offset,
+          _fileUri);
+    } else {
+      var inferredType = _matchTypes(overriddenTypes, _name, _offset);
       if (declaredMethod is SyntheticAccessor) {
         declaredMethod._field.type = inferredType;
       } else {
@@ -333,13 +362,21 @@ class ForwardingNode extends Procedure {
         .getDispatchTarget(superclass, procedure.name,
             setter: kind == ProcedureKind.Setter);
     if (superTarget == null) return;
+    if (superTarget is Procedure && superTarget.isForwardingStub) {
+      superTarget = _getForwardingStubSuperTarget(superTarget);
+    }
     procedure.isAbstract = false;
     if (!procedure.isForwardingStub) {
+      // This procedure exists abstractly in the source code; we need to make it
+      // concrete and give it a body that is a forwarding stub.  This situation
+      // is called a "forwarding semi-stub".
+      procedure.isForwardingStub = true;
+      procedure.isForwardingSemiStub = true;
       _interfaceResolver._instrumentation?.record(
-          Uri.parse(procedure.fileUri),
+          procedure.fileUri,
           procedure.fileOffset,
           'forwardingStub',
-          new InstrumentationValueLiteral('implementation'));
+          new InstrumentationValueLiteral('semi-stub'));
     }
     var positionalArguments = function.positionalParameters
         .map<Expression>((parameter) => new VariableGet(parameter))
@@ -380,6 +417,7 @@ class ForwardingNode extends Procedure {
     }
     function.body = new ReturnStatement(superCall)..parent = function;
     procedure.transformerFlags |= TransformerFlag.superCalls;
+    procedure.forwardingStubSuperTarget = superTarget;
   }
 
   /// Creates a forwarding stub based on the given [target].
@@ -425,10 +463,19 @@ class ForwardingNode extends Procedure {
         typeParameters: typeParameters,
         requiredParameterCount: target.function.requiredParameterCount,
         returnType: substitution.substituteType(target.function.returnType));
+    Member finalTarget;
+    if (target is Procedure && target.isForwardingStub) {
+      finalTarget = target.forwardingStubInterfaceTarget;
+    } else if (target is SyntheticAccessor) {
+      finalTarget = target._field;
+    } else {
+      finalTarget = target;
+    }
     return new Procedure(name, kind, function,
         isAbstract: true,
         isForwardingStub: true,
-        fileUri: enclosingClass.fileUri)
+        fileUri: enclosingClass.fileUri,
+        forwardingStubInterfaceTarget: finalTarget)
       ..fileOffset = enclosingClass.fileOffset
       ..parent = enclosingClass
       ..isGenericContravariant = target.isGenericContravariant;
@@ -595,6 +642,21 @@ class ForwardingNode extends Procedure {
   static List<Procedure> getCandidates(ForwardingNode node) {
     return node._candidates.sublist(node._start, node._end);
   }
+
+  static Member _getForwardingStubSuperTarget(Procedure forwardingStub) {
+    // TODO(paulberry): when dartbug.com/31562 is fixed, this should become
+    // easier.
+    ReturnStatement body = forwardingStub.function.body;
+    var expression = body.expression;
+    if (expression is SuperMethodInvocation) {
+      return expression.interfaceTarget;
+    } else if (expression is SuperPropertySet) {
+      return expression.interfaceTarget;
+    } else {
+      return unhandled('${expression.runtimeType}',
+          '_getForwardingStubSuperTarget', -1, null);
+    }
+  }
 }
 
 /// An [InterfaceResolver] keeps track of the information necessary to resolve
@@ -625,8 +687,8 @@ class InterfaceResolver {
   ///
   /// If [setters] is `true`, the list will be populated by setters; otherwise
   /// it will be populated by getters and methods.
-  void createApiMembers(
-      Class class_, List<Member> getters, List<Member> setters) {
+  void createApiMembers(Class class_, List<Member> getters,
+      List<Member> setters, LibraryBuilder library) {
     var candidates = ClassHierarchy.mergeSortedLists(
         getCandidates(class_, false), getCandidates(class_, true));
     // Now create getter and perhaps setter forwarding nodes for each unique
@@ -674,7 +736,9 @@ class InterfaceResolver {
               inheritedGetterStart,
               getterEnd,
               inheritedSetterStart,
-              setterEnd);
+              setterEnd,
+              library,
+              class_.fileUri);
         }
         var forwardingNode = new ForwardingNode(
             this,
@@ -707,7 +771,9 @@ class InterfaceResolver {
                 inheritedSetterStart,
                 setterEnd,
                 inheritedGetterStart,
-                getterEnd);
+                getterEnd,
+                library,
+                class_.fileUri);
           }
         }
         var forwardingNode = new ForwardingNode(
@@ -738,11 +804,11 @@ class InterfaceResolver {
         resolution = member;
       }
       if (resolution is Procedure &&
-          resolution.isForwardingStub &&
+          resolution.isSyntheticForwarder &&
           identical(resolution.enclosingClass, class_)) {
         if (strongMode) class_.addMember(resolution);
         _instrumentation?.record(
-            Uri.parse(class_.location.file),
+            class_.location.file,
             class_.fileOffset,
             'forwardingStub',
             new InstrumentationValueForForwardingStub(resolution));
@@ -796,21 +862,23 @@ class InterfaceResolver {
       int start,
       int end,
       int crossStart,
-      int crossEnd) {
+      int crossEnd,
+      LibraryBuilder library,
+      Uri fileUri) {
     if (!_requiresTypeInference(procedure)) return null;
     switch (procedure.kind) {
       case ProcedureKind.Getter:
       case ProcedureKind.Setter:
         if (strongMode && start < end) {
           return new AccessorInferenceNode(
-              this, procedure, candidates, start, end);
+              this, procedure, candidates, start, end, library, fileUri);
         } else if (strongMode && crossStart < crossEnd) {
-          return new AccessorInferenceNode(
-              this, procedure, candidates, crossStart, crossEnd);
+          return new AccessorInferenceNode(this, procedure, candidates,
+              crossStart, crossEnd, library, fileUri);
         } else if (procedure is SyntheticAccessor &&
             procedure._field.initializer != null) {
           var node = new FieldInitializerInferenceNode(
-              _typeInferenceEngine, procedure._field);
+              _typeInferenceEngine, procedure._field, library);
           ShadowField.setInferenceNode(procedure._field, node);
           return node;
         }
@@ -818,7 +886,7 @@ class InterfaceResolver {
       default: // Method || Operator
         if (strongMode) {
           return new MethodInferenceNode(
-              this, procedure, candidates, start, end);
+              this, procedure, candidates, start, end, library, fileUri);
         }
         return null;
     }
@@ -884,7 +952,7 @@ class InterfaceResolver {
   ///
   /// Caller is responsible for checking whether [_instrumentation] is `null`.
   void _recordInstrumentation(Class class_) {
-    var uri = Uri.parse(class_.fileUri);
+    var uri = class_.fileUri;
     void recordCovariance(int fileOffset, bool isExplicitlyCovariant,
         bool isGenericCovariantInterface, bool isGenericCovariantImpl) {
       var covariance = <String>[];
@@ -909,7 +977,9 @@ class InterfaceResolver {
     for (var procedure in class_.procedures) {
       if (procedure.isStatic) continue;
       // Forwarding stubs are annotated separately
-      if (procedure.isForwardingStub) continue;
+      if (procedure.isSyntheticForwarder) {
+        continue;
+      }
       void recordFormalAnnotations(VariableDeclaration formal) {
         recordCovariance(formal.fileOffset, formal.isCovariant,
             formal.isGenericCovariantInterface, formal.isGenericCovariantImpl);
@@ -1004,7 +1074,15 @@ class InterfaceResolver {
     if (procedure is SyntheticAccessor) {
       return ShadowField.isImplicitlyTyped(procedure._field);
     }
-    if (ShadowProcedure.hasImplicitReturnType(procedure)) return true;
+    if (procedure.kind != ProcedureKind.Setter &&
+        ShadowProcedure.hasImplicitReturnType(procedure)) {
+      // Inference of the return type of `[]=` is handled separately by
+      // KernelProcedureBuilder.build, since there are no dependencies.
+      if (procedure.kind != ProcedureKind.Operator ||
+          procedure.name.name != '[]=') {
+        return true;
+      }
+    }
     var function = procedure.function;
     for (var parameter in function.positionalParameters) {
       if (ShadowVariableDeclaration.isImplicitlyTyped(parameter)) return true;
@@ -1035,10 +1113,14 @@ abstract class MemberInferenceNode extends InferenceNode {
   /// [_declaredMethod].
   final int _end;
 
-  MemberInferenceNode(this._interfaceResolver, this._declaredMethod,
-      this._candidates, this._start, this._end);
+  final LibraryBuilder _library;
 
-  DartType _matchTypes(Iterable<DartType> types) {
+  final Uri _fileUri;
+
+  MemberInferenceNode(this._interfaceResolver, this._declaredMethod,
+      this._candidates, this._start, this._end, this._library, this._fileUri);
+
+  DartType _matchTypes(Iterable<DartType> types, String name, int charOffset) {
     var iterator = types.iterator;
     if (!iterator.moveNext()) {
       // No overridden types.  Infer `dynamic`.
@@ -1047,7 +1129,11 @@ abstract class MemberInferenceNode extends InferenceNode {
     var inferredType = iterator.current;
     while (iterator.moveNext()) {
       if (inferredType != iterator.current) {
-        // TODO(paulberry): Types don't match.  Report an error.
+        // Types don't match.  Report an error.
+        _library.addCompileTimeError(
+            templateCantInferTypeDueToInconsistentOverrides.withArguments(name),
+            charOffset,
+            _fileUri);
         return const DynamicType();
       }
     }
@@ -1058,17 +1144,27 @@ abstract class MemberInferenceNode extends InferenceNode {
 /// Concrete class derived from [InferenceNode] to represent type inference of
 /// methods.
 class MethodInferenceNode extends MemberInferenceNode {
-  MethodInferenceNode(InterfaceResolver interfaceResolver,
-      Procedure declaredMethod, List<Member> candidates, int start, int end)
-      : super(interfaceResolver, declaredMethod, candidates, start, end);
+  MethodInferenceNode(
+      InterfaceResolver interfaceResolver,
+      Procedure declaredMethod,
+      List<Member> candidates,
+      int start,
+      int end,
+      LibraryBuilder library,
+      Uri fileUri)
+      : super(interfaceResolver, declaredMethod, candidates, start, end,
+            library, fileUri);
 
   @override
   void resolveInternal() {
     var declaredMethod = _declaredMethod;
     var overriddenTypes = _computeMethodOverriddenTypes();
-    if (ShadowProcedure.hasImplicitReturnType(declaredMethod)) {
-      declaredMethod.function.returnType =
-          _matchTypes(overriddenTypes.map((type) => type.returnType));
+    if (ShadowProcedure.hasImplicitReturnType(declaredMethod) &&
+        _declaredMethod.name != indexSetName) {
+      declaredMethod.function.returnType = _matchTypes(
+          overriddenTypes.map((type) => type.returnType),
+          declaredMethod.name.name,
+          declaredMethod.fileOffset);
     }
     var positionalParameters = declaredMethod.function.positionalParameters;
     for (int i = 0; i < positionalParameters.length; i++) {
@@ -1090,7 +1186,9 @@ class MethodInferenceNode extends MemberInferenceNode {
         //     tools are free to either emit an error, or to defer the error to
         //     override checking.
         positionalParameters[i].type = _matchTypes(
-            overriddenTypes.map((type) => getPositionalParameterType(type, i)));
+            overriddenTypes.map((type) => getPositionalParameterType(type, i)),
+            positionalParameters[i].name,
+            positionalParameters[i].fileOffset);
       }
     }
     var namedParameters = declaredMethod.function.namedParameters;
@@ -1098,7 +1196,9 @@ class MethodInferenceNode extends MemberInferenceNode {
       if (ShadowVariableDeclaration.isImplicitlyTyped(namedParameters[i])) {
         var name = namedParameters[i].name;
         namedParameters[i].type = _matchTypes(
-            overriddenTypes.map((type) => getNamedParameterType(type, name)));
+            overriddenTypes.map((type) => getNamedParameterType(type, name)),
+            namedParameters[i].name,
+            namedParameters[i].fileOffset);
       }
     }
     // Circularities should never occur with method inference, since the

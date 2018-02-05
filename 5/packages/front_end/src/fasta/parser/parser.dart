@@ -29,13 +29,14 @@ import '../../scanner/token.dart'
 
 import '../scanner/token_constants.dart'
     show
+        CLOSE_CURLY_BRACKET_TOKEN,
         COMMA_TOKEN,
         DOUBLE_TOKEN,
         EOF_TOKEN,
         EQ_TOKEN,
         FUNCTION_TOKEN,
-        GT_TOKEN,
         GT_GT_TOKEN,
+        GT_TOKEN,
         HASH_TOKEN,
         HEXADECIMAL_TOKEN,
         IDENTIFIER_TOKEN,
@@ -75,12 +76,10 @@ import 'member_kind.dart' show MemberKind;
 
 import 'modifier_context.dart'
     show
-        ClassMethodModifierContext,
-        FactoryModifierContext,
-        ModifierContext,
         ModifierRecoveryContext,
-        TopLevelMethodModifierContext,
-        isModifier;
+        ModifierRecoveryContext2,
+        isModifier,
+        typeContinuationAfterVar;
 
 import 'recovery_listeners.dart'
     show ClassHeaderRecoveryListener, ImportRecoveryListener;
@@ -88,9 +87,9 @@ import 'recovery_listeners.dart'
 import 'token_stream_rewriter.dart' show TokenStreamRewriter;
 
 import 'type_continuation.dart'
-    show TypeContinuation, typeContiunationFromFormalParameterKind;
+    show TypeContinuation, typeContinuationFromFormalParameterKind;
 
-import 'util.dart' show closeBraceTokenFor, optional;
+import 'util.dart' show beforeCloseBraceTokenFor, closeBraceTokenFor, optional;
 
 /// An event generating parser of Dart programs. This parser expects all tokens
 /// in a linked list (aka a token stream).
@@ -304,7 +303,7 @@ class Parser {
     DirectiveContext directiveState = new DirectiveContext();
     token = syntheticPreviousToken(token);
     while (!token.next.isEof) {
-      Token start = token.next;
+      final Token start = token.next;
       token = parseTopLevelDeclarationImpl(token, directiveState);
       listener.endTopLevelDeclaration(token.next);
       count++;
@@ -318,6 +317,65 @@ class Parser {
         listener.endTopLevelDeclaration(token.next);
         count++;
       }
+    }
+    token = token.next;
+    listener.endCompilationUnit(count, token);
+    // Clear fields that could lead to memory leak.
+    cachedRewriter = null;
+    return token;
+  }
+
+  /// This method exists for analyzer compatibility only
+  /// and will be removed once analyzer/fasta integration is complete.
+  ///
+  /// Similar to [parseUnit], this method parses a compilation unit,
+  /// but stops when it reaches the first declaration or EOF.
+  ///
+  /// This method is only invoked from outside the parser. As a result, this
+  /// method takes the next token to be consumed rather than the last consumed
+  /// token and returns the token after the last consumed token rather than the
+  /// last consumed token.
+  Token parseDirectives(Token token) {
+    listener.beginCompilationUnit(token);
+    int count = 0;
+    DirectiveContext directiveState = new DirectiveContext();
+    token = syntheticPreviousToken(token);
+    while (!token.next.isEof) {
+      final Token start = token.next;
+      final String value = start.stringValue;
+      final String nextValue = start.next.stringValue;
+
+      // If a built-in keyword is being used as function name, then stop.
+      if (identical(nextValue, '.') ||
+          identical(nextValue, '<') ||
+          identical(nextValue, '(')) {
+        break;
+      }
+
+      if (identical(token.next.type, TokenType.SCRIPT_TAG)) {
+        directiveState?.checkScriptTag(this, token.next);
+        token = parseScript(token);
+      } else {
+        token = parseMetadataStar(token);
+        if (identical(value, 'import')) {
+          directiveState?.checkImport(this, token);
+          token = parseImport(token);
+        } else if (identical(value, 'export')) {
+          directiveState?.checkExport(this, token);
+          token = parseExport(token);
+        } else if (identical(value, 'library')) {
+          directiveState?.checkLibrary(this, token);
+          token = parseLibraryName(token);
+        } else if (identical(value, 'part')) {
+          token = parsePartOrPartOf(token, directiveState);
+        } else if (identical(value, ';')) {
+          token = start;
+        } else {
+          listener.handleDirectivesOnly();
+          break;
+        }
+      }
+      listener.endTopLevelDeclaration(token.next);
     }
     token = token.next;
     listener.endCompilationUnit(count, token);
@@ -362,7 +420,7 @@ class Parser {
     }
     token = parseMetadataStar(token);
     if (token.next.isTopLevelKeyword) {
-      return parseTopLevelKeywordDeclaration(null, token, directiveState);
+      return parseTopLevelKeywordDeclaration(token, null, directiveState);
     }
     Token start = token;
     // Skip modifiers to find a top level keyword or identifier
@@ -387,7 +445,7 @@ class Parser {
         modifier = modifier.next;
       }
       return parseTopLevelKeywordDeclaration(
-          beforeAbstractToken, token, directiveState);
+          token, beforeAbstractToken, directiveState);
     } else if (next.isIdentifier || next.keyword != null) {
       // TODO(danrubel): improve parseTopLevelMember
       // so that we don't parse modifiers twice.
@@ -402,18 +460,17 @@ class Parser {
     if (next.isOperator && optional('(', next.next)) {
       // This appears to be a top level operator declaration, which is invalid.
       reportRecoverableError(next, fasta.messageTopLevelOperator);
-      // Insert a synthetic identifer
+      // Insert a synthetic identifier
       // and continue parsing as a top level function.
-      rewriter.insertToken(
+      rewriter.insertTokenAfter(
+          next,
           new SyntheticStringToken(TokenType.IDENTIFIER,
-              '#synthetic_function_${next.charOffset}', token.charOffset, 0),
-          next.next);
+              '#synthetic_function_${next.charOffset}', token.charOffset, 0));
       return parseTopLevelMember(next);
     }
     // Ignore any preceding modifiers and just report the unexpected token
-    reportRecoverableErrorWithToken(next, fasta.templateExpectedDeclaration);
-    listener.handleInvalidTopLevelDeclaration(next);
-    return next;
+    listener.beginTopLevelMember(next);
+    return reportInvalidTopLevelDeclaration(next);
   }
 
   // Report an error for the given modifier preceding a top level keyword
@@ -440,33 +497,34 @@ class Parser {
 
   /// Parse any top-level declaration that begins with a keyword.
   Token parseTopLevelKeywordDeclaration(
-      Token beforeAbstractToken, Token token, DirectiveContext directiveState) {
-    // TODO(brianwilkerson): Move `token` to be the first parameter.
+      Token token, Token beforeAbstractToken, DirectiveContext directiveState) {
     Token previous = token;
     token = token.next;
     assert(token.isTopLevelKeyword);
     final String value = token.stringValue;
     if (identical(value, 'class')) {
       directiveState?.checkDeclaration();
-      return parseClassOrNamedMixinApplication(beforeAbstractToken, previous);
+      return parseClassOrNamedMixinApplication(previous, beforeAbstractToken);
     } else if (identical(value, 'enum')) {
       directiveState?.checkDeclaration();
       return parseEnum(previous);
     } else if (identical(value, 'typedef')) {
       Token next = token.next;
+      directiveState?.checkDeclaration();
       if (next.isIdentifier || optional("void", next)) {
-        directiveState?.checkDeclaration();
         return parseTypedef(previous);
       } else {
-        directiveState?.checkDeclaration();
         return parseTopLevelMember(previous);
       }
     } else {
       // The remaining top level keywords are built-in keywords
-      // and can be used as an identifier in a top level declaration
-      // such as "abstract<T>() => 0;".
+      // and can be used in a top level declaration
+      // as an identifier such as "abstract<T>() => 0;"
+      // or as a prefix such as "abstract.A b() => 0;".
       String nextValue = token.next.stringValue;
-      if (identical(nextValue, '(') || identical(nextValue, '<')) {
+      if (identical(nextValue, '(') ||
+          identical(nextValue, '<') ||
+          identical(nextValue, '.')) {
         directiveState?.checkDeclaration();
         return parseTopLevelMember(previous);
       } else if (identical(value, 'library')) {
@@ -513,12 +571,11 @@ class Parser {
       Token deferredToken = next;
       Token asKeyword = next.next;
       token = ensureIdentifier(
-          asKeyword.next, IdentifierContext.importPrefixDeclaration);
+          asKeyword, IdentifierContext.importPrefixDeclaration);
       listener.handleImportPrefix(deferredToken, asKeyword);
     } else if (optional('as', next)) {
       Token asKeyword = next;
-      token = ensureIdentifier(
-          next.next, IdentifierContext.importPrefixDeclaration);
+      token = ensureIdentifier(next, IdentifierContext.importPrefixDeclaration);
       listener.handleImportPrefix(null, asKeyword);
     } else {
       listener.handleImportPrefix(null, null);
@@ -535,34 +592,33 @@ class Parser {
     Token importKeyword = token.next;
     assert(optional('import', importKeyword));
     listener.beginImport(importKeyword);
-    token = parseLiteralStringOrRecoverExpression(importKeyword);
+    token = ensureLiteralString(importKeyword);
     Token uri = token;
-    token = parseConditionalUris(token);
+    token = parseConditionalUriStar(token);
     token = parseImportPrefixOpt(token);
-    token = parseCombinators(token).next;
+    token = parseCombinatorStar(token).next;
     if (optional(';', token)) {
       listener.endImport(importKeyword, token);
       return token;
     } else {
       // Recovery
       listener.endImport(importKeyword, null);
-      return parseImportRecovery(uri, token);
+      return parseImportRecovery(uri);
     }
   }
 
   /// Recover given out-of-order clauses in an import directive where [token] is
-  /// the import keyword and [recoveryStart] is the token on which main parsing
-  /// stopped.
-  Token parseImportRecovery(Token token, Token recoveryStart) {
+  /// the import keyword.
+  Token parseImportRecovery(Token token) {
     final primaryListener = listener;
     final recoveryListener = new ImportRecoveryListener(primaryListener);
 
     // Reparse to determine which clauses have already been parsed
     // but intercept the events so they are not sent to the primary listener
     listener = recoveryListener;
-    token = parseConditionalUris(token);
+    token = parseConditionalUriStar(token);
     token = parseImportPrefixOpt(token);
-    token = parseCombinators(token);
+    token = parseCombinatorStar(token);
 
     Token firstDeferredKeyword = recoveryListener.deferredKeyword;
     bool hasPrefix = recoveryListener.asKeyword != null;
@@ -584,7 +640,7 @@ class Parser {
       // During recovery, clauses are parsed in the same order
       // and generate the same events as in the parseImport method above.
       recoveryListener.clear();
-      token = parseConditionalUris(token);
+      token = parseConditionalUriStar(token);
       if (recoveryListener.ifKeyword != null) {
         if (firstDeferredKeyword != null) {
           // TODO(danrubel): report error indicating conditional should
@@ -630,7 +686,7 @@ class Parser {
         }
       }
 
-      token = parseCombinators(token);
+      token = parseCombinatorStar(token);
       hasCombinator = hasCombinator || recoveryListener.hasCombinator;
 
       if (optional(';', token.next)) {
@@ -655,8 +711,7 @@ class Parser {
   ///   conditionalUri*
   /// ;
   /// ```
-  Token parseConditionalUris(Token token) {
-    // TODO(brianwilkerson): Rename to `parseConditionalUriStar`?
+  Token parseConditionalUriStar(Token token) {
     listener.beginConditionalUris(token.next);
     int count = 0;
     while (optional('if', token.next)) {
@@ -682,10 +737,10 @@ class Parser {
     Token equalitySign;
     if (optional('==', token)) {
       equalitySign = token;
-      token = parseLiteralStringOrRecoverExpression(token).next;
+      token = ensureLiteralString(token).next;
     }
     expect(')', token);
-    token = parseLiteralStringOrRecoverExpression(token);
+    token = ensureLiteralString(token);
     listener.endConditionalUri(ifKeyword, leftParen, equalitySign);
     return token;
   }
@@ -696,12 +751,12 @@ class Parser {
   /// ;
   /// ```
   Token parseDottedName(Token token) {
-    token = ensureIdentifier(token.next, IdentifierContext.dottedName);
+    token = ensureIdentifier(token, IdentifierContext.dottedName);
     Token firstIdentifier = token;
     int count = 1;
     while (optional('.', token.next)) {
       token = ensureIdentifier(
-          token.next.next, IdentifierContext.dottedNameContinuation);
+          token.next, IdentifierContext.dottedNameContinuation);
       count++;
     }
     listener.handleDottedName(count, firstIdentifier);
@@ -717,9 +772,9 @@ class Parser {
     Token exportKeyword = token.next;
     assert(optional('export', exportKeyword));
     listener.beginExport(exportKeyword);
-    token = ensureParseLiteralString(exportKeyword);
-    token = parseConditionalUris(token);
-    token = parseCombinators(token);
+    token = ensureLiteralString(exportKeyword);
+    token = parseConditionalUriStar(token);
+    token = parseCombinatorStar(token);
     token = ensureSemicolon(token);
     listener.endExport(exportKeyword, token);
     return token;
@@ -730,8 +785,7 @@ class Parser {
   ///   (hideCombinator | showCombinator)*
   /// ;
   /// ```
-  Token parseCombinators(Token token) {
-    // TODO(brianwilkerson): Rename to `parseCombinatorsStar`?
+  Token parseCombinatorStar(Token token) {
     Token next = token.next;
     listener.beginCombinators(next);
     int count = 0;
@@ -785,10 +839,10 @@ class Parser {
   /// ;
   /// ```
   Token parseIdentifierList(Token token) {
-    token = ensureIdentifier(token.next, IdentifierContext.combinator);
+    token = ensureIdentifier(token, IdentifierContext.combinator);
     int count = 1;
     while (optional(',', token.next)) {
-      token = ensureIdentifier(token.next.next, IdentifierContext.combinator);
+      token = ensureIdentifier(token.next, IdentifierContext.combinator);
       count++;
     }
     listener.handleIdentifierList(count);
@@ -833,7 +887,7 @@ class Parser {
     Token partKeyword = token.next;
     assert(optional('part', partKeyword));
     listener.beginPart(partKeyword);
-    token = parseLiteralStringOrRecoverExpression(partKeyword);
+    token = ensureLiteralString(partKeyword);
     token = ensureSemicolon(token);
     listener.endPart(partKeyword, token);
     return token;
@@ -855,7 +909,7 @@ class Parser {
       token = parseQualified(ofKeyword, IdentifierContext.partName,
           IdentifierContext.partNameContinuation);
     } else {
-      token = parseLiteralStringOrRecoverExpression(ofKeyword);
+      token = ensureLiteralString(ofKeyword);
     }
     token = ensureSemicolon(token);
     listener.endPartOf(partKeyword, ofKeyword, token, hasName);
@@ -868,12 +922,6 @@ class Parser {
   /// ;
   /// ```
   Token parseMetadataStar(Token token) {
-    // TODO(brianwilkerson): Either remove the invocation of `previous` by
-    // making `injectGenericCommentTypeAssign` accept and return the last
-    // consumed token, or remove the invocation of
-    // `injectGenericCommentTypeAssign` by invoking it outside this method where
-    // invoking it is necessary.
-    token = listener.injectGenericCommentTypeAssign(token.next).previous;
     listener.beginMetadataStar(token.next);
     int count = 0;
     while (optional('@', token.next)) {
@@ -893,7 +941,7 @@ class Parser {
     Token atToken = token.next;
     assert(optional('@', atToken));
     listener.beginMetadata(atToken);
-    token = ensureIdentifier(atToken.next, IdentifierContext.metadataReference);
+    token = ensureIdentifier(atToken, IdentifierContext.metadataReference);
     token =
         parseQualifiedRestOpt(token, IdentifierContext.metadataContinuation);
     if (optional("<", token.next)) {
@@ -903,8 +951,8 @@ class Parser {
     Token period = null;
     if (optional('.', token.next)) {
       period = token.next;
-      token = ensureIdentifier(period.next,
-          IdentifierContext.metadataContinuationAfterTypeArguments);
+      token = ensureIdentifier(
+          period, IdentifierContext.metadataContinuationAfterTypeArguments);
     }
     token = parseArgumentsOpt(token);
     listener.endMetadata(atToken, period, token.next);
@@ -948,14 +996,13 @@ class Parser {
     Token afterType = parseType(typedefKeyword, TypeContinuation.Typedef);
     if (afterType == null) {
       token = ensureIdentifier(
-          typedefKeyword.next, IdentifierContext.typedefDeclaration);
+          typedefKeyword, IdentifierContext.typedefDeclaration);
       token = parseTypeVariablesOpt(token).next;
       equals = token;
       expect('=', token);
       token = parseType(token);
     } else {
-      token = ensureIdentifier(
-          afterType.next, IdentifierContext.typedefDeclaration);
+      token = ensureIdentifier(afterType, IdentifierContext.typedefDeclaration);
       token = parseTypeVariablesOpt(token);
       token =
           parseFormalParametersRequiredOpt(token, MemberKind.FunctionTypeAlias);
@@ -987,10 +1034,19 @@ class Parser {
   }
 
   Token skipFormalParameters(Token token, MemberKind kind) {
+    Token lastConsumed = token;
     token = token.next;
-    assert(optional('(', token));
     // TODO(ahe): Shouldn't this be `beginFormalParameters`?
     listener.beginOptionalFormalParameters(token);
+    if (!optional('(', token)) {
+      if (optional(';', token)) {
+        reportRecoverableError(token, fasta.messageExpectedOpenParens);
+        listener.endFormalParameters(0, token, token, kind);
+        return lastConsumed;
+      }
+      listener.endFormalParameters(0, token, token, kind);
+      return reportUnexpectedToken(token);
+    }
     Token closeBrace = closeBraceTokenFor(token);
     listener.endFormalParameters(0, token, closeBrace, kind);
     return closeBrace;
@@ -1007,7 +1063,7 @@ class Parser {
       Token replacement = link(
           new SyntheticBeginToken(TokenType.OPEN_PAREN, next.charOffset),
           new SyntheticToken(TokenType.CLOSE_PAREN, next.charOffset));
-      rewriter.insertToken(replacement, next);
+      rewriter.insertTokenAfter(token, replacement);
     }
     return parseFormalParameters(token, kind);
   }
@@ -1039,9 +1095,10 @@ class Parser {
         token = ensureCloseParen(token, begin);
         break;
       } else if (identical(value, '[]')) {
-        --parameterCount;
-        reportRecoverableError(next, fasta.messageEmptyOptionalParameterList);
-        token = ensureCloseParen(next, begin);
+        // Recovery
+        token = rewriteSquareBrackets(token);
+        token = parseOptionalPositionalParameters(token, kind);
+        token = ensureCloseParen(token, begin);
         break;
       }
       token = parseFormalParameter(token, FormalParameterKind.mandatory, kind);
@@ -1091,10 +1148,62 @@ class Parser {
   /// ```
   Token parseFormalParameter(
       Token token, FormalParameterKind parameterKind, MemberKind memberKind) {
+    assert(parameterKind != null);
     token = parseMetadataStar(token);
-    listener.beginFormalParameter(token.next, memberKind);
-    token = parseModifiers(token, memberKind, parameterKind: parameterKind);
-    return token;
+    Token next = token.next;
+    listener.beginFormalParameter(next, memberKind);
+
+    TypeContinuation typeContinuation =
+        typeContinuationFromFormalParameterKind(parameterKind);
+    Token varFinalOrConst;
+    if (isModifier(next)) {
+      int modifierCount = 0;
+      Token covariantToken;
+      if (optional('covariant', next)) {
+        if (memberKind != MemberKind.StaticMethod &&
+            memberKind != MemberKind.TopLevelMethod) {
+          covariantToken = token = parseModifier(token);
+          ++modifierCount;
+          next = token.next;
+        }
+      }
+
+      if (isModifier(next)) {
+        if (optional('var', next)) {
+          typeContinuation = typeContinuationAfterVar(typeContinuation);
+          varFinalOrConst = token = parseModifier(token);
+          ++modifierCount;
+          next = token.next;
+        } else if (optional('final', next)) {
+          varFinalOrConst = token = parseModifier(token);
+          ++modifierCount;
+          next = token.next;
+        }
+
+        if (isModifier(next)) {
+          // Recovery
+          ModifierRecoveryContext modifierContext = new ModifierRecoveryContext(
+              this, memberKind, parameterKind, false, typeContinuation);
+          token = modifierContext.parseRecovery(token,
+              covariantToken: covariantToken, varFinalOrConst: varFinalOrConst);
+
+          modifierCount = modifierContext.modifierCount;
+          covariantToken = modifierContext.covariantToken;
+          varFinalOrConst = modifierContext.varFinalOrConst;
+
+          memberKind = modifierContext.memberKind;
+          typeContinuation = modifierContext.typeContinuation;
+          varFinalOrConst = modifierContext.varFinalOrConst;
+          modifierContext = null;
+        }
+      }
+      listener.handleModifiers(modifierCount);
+    } else {
+      listener.handleModifiers(0);
+    }
+
+    return parseType(
+        token, typeContinuation, null, memberKind, varFinalOrConst);
   }
 
   /// ```
@@ -1107,21 +1216,42 @@ class Parser {
     assert(optional('[', token));
     listener.beginOptionalFormalParameters(begin);
     int parameterCount = 0;
-    do {
+    while (true) {
       Token next = token.next;
       if (optional(']', next)) {
-        token = next;
         break;
       }
       token = parseFormalParameter(
-              token, FormalParameterKind.optionalPositional, kind)
-          .next;
+          token, FormalParameterKind.optionalPositional, kind);
+      next = token.next;
       ++parameterCount;
-    } while (optional(',', token));
-    if (parameterCount == 0) {
-      reportRecoverableError(token, fasta.messageEmptyOptionalParameterList);
+      if (!optional(',', next)) {
+        if (!optional(']', next)) {
+          // Recovery
+          reportRecoverableError(
+              next, fasta.templateExpectedButGot.withArguments(']'));
+          // Scanner guarantees a closing bracket.
+          next = begin.endGroup;
+          while (token.next != next) {
+            token = token.next;
+          }
+        }
+        break;
+      }
+      token = next;
     }
-    expect(']', token);
+    if (parameterCount == 0) {
+      token = rewriteAndRecover(
+          token,
+          fasta.messageEmptyOptionalParameterList,
+          new SyntheticStringToken(
+              TokenType.IDENTIFIER, '', token.next.charOffset, 0));
+      token = parseFormalParameter(
+          token, FormalParameterKind.optionalPositional, kind);
+      ++parameterCount;
+    }
+    token = token.next;
+    assert(optional(']', token));
     listener.endOptionalFormalParameters(parameterCount, begin, token);
     return token;
   }
@@ -1137,31 +1267,199 @@ class Parser {
     assert(optional('{', token));
     listener.beginOptionalFormalParameters(begin);
     int parameterCount = 0;
-    do {
+    while (true) {
       Token next = token.next;
       if (optional('}', next)) {
-        token = next;
         break;
       }
       token =
-          parseFormalParameter(token, FormalParameterKind.optionalNamed, kind)
-              .next;
+          parseFormalParameter(token, FormalParameterKind.optionalNamed, kind);
+      next = token.next;
       ++parameterCount;
-    } while (optional(',', token));
-    if (parameterCount == 0) {
-      reportRecoverableError(token, fasta.messageEmptyNamedParameterList);
+      if (!optional(',', next)) {
+        if (!optional('}', next)) {
+          // Recovery
+          reportRecoverableError(
+              next, fasta.templateExpectedButGot.withArguments('}'));
+          // Scanner guarantees a closing bracket.
+          next = begin.endGroup;
+          while (token.next != next) {
+            token = token.next;
+          }
+        }
+        break;
+      }
+      token = next;
     }
-    expect('}', token);
+    if (parameterCount == 0) {
+      token = rewriteAndRecover(
+          token,
+          fasta.messageEmptyNamedParameterList,
+          new SyntheticStringToken(
+              TokenType.IDENTIFIER, '', token.next.charOffset, 0));
+      token =
+          parseFormalParameter(token, FormalParameterKind.optionalNamed, kind);
+      ++parameterCount;
+    }
+    token = token.next;
+    assert(optional('}', token));
     listener.endOptionalFormalParameters(parameterCount, begin, token);
     return token;
+  }
+
+  /// Skip over the `Function` type parameter.
+  /// For example, `Function<E>(int foo)` or `Function(foo)` or just `Function`.
+  Token skipGenericFunctionType(Token token) {
+    assert(optional('Function', token));
+    while (true) {
+      Token next = token.next;
+      if (optional('<', next)) {
+        next = next.endGroup;
+        if (next == null) {
+          // TODO(danrubel): Consider better recovery
+          // because this is probably a type reference.
+          return token;
+        }
+        token = next;
+        next = token.next;
+      }
+      if (optional('(', next)) {
+        token = next.endGroup;
+        next = token.next;
+      }
+      if (optional('Function', next)) {
+        token = next;
+      } else {
+        return token;
+      }
+    }
+  }
+
+  /// If the token after [token] begins a valid type reference
+  /// or looks like a valid type reference, then return the last token
+  /// in that type reference, otherwise return [token].
+  ///
+  /// For example, it is an error when built-in keyword is being used as a type,
+  /// as in `abstract<t> foo`. In situations such as this, return the last
+  /// token in that type reference and assume the caller will report the error
+  /// and recover.
+  Token skipTypeReferenceOpt(Token token) {
+    final Token beforeStart = token;
+    token = token.next;
+    TokenType type = token.type;
+    bool looksLikeTypeRef = false;
+    if (type != TokenType.IDENTIFIER) {
+      String value = token.stringValue;
+      if (identical(value, 'get') || identical(value, 'set')) {
+        // No type reference.
+        return beforeStart;
+      } else if (identical(value, 'factory') || identical(value, 'operator')) {
+        Token next = token.next;
+        if (!optional('<', next) || next.endGroup == null) {
+          // No type reference.
+          return beforeStart;
+        }
+        // Even though built-ins cannot be used as a type,
+        // it looks like its being used as such.
+        looksLikeTypeRef = true;
+      } else if (identical(value, 'void')) {
+        // Found type reference.
+        looksLikeTypeRef = true;
+      } else if (identical(value, 'Function')) {
+        // Found type reference.
+        return skipGenericFunctionType(token);
+      } else if (identical(value, 'typedef')) {
+        // `typedef` can be used as a prefix.
+        // For example: `typedef.A x = new typedef.A();`
+        if (!optional('.', token.next)) {
+          // No type reference.
+          return beforeStart;
+        }
+      } else if (!token.isIdentifier) {
+        // No type reference.
+        return beforeStart;
+      }
+    }
+
+    Token next = token.next;
+    if (optional('.', next)) {
+      token = next;
+      next = token.next;
+      if (next.type != TokenType.IDENTIFIER) {
+        String value = next.stringValue;
+        if (identical(value, 'get') || identical(value, 'set')) {
+          // Found a type reference, but missing an identifier after the period.
+          rewriteAndRecover(
+              token,
+              fasta.templateExpectedIdentifier.withArguments(next),
+              new SyntheticStringToken(
+                  TokenType.IDENTIFIER, '', next.charOffset, 0));
+          // Return the newly inserted synthetic token
+          // as the end of the type reference.
+          return token.next;
+        } else if (identical(value, '<') || identical(value, 'Function')) {
+          // Found a type reference, but missing an identifier after the period.
+          rewriteAndRecover(
+              token,
+              fasta.templateExpectedIdentifier.withArguments(next),
+              new SyntheticStringToken(
+                  TokenType.IDENTIFIER, '', next.charOffset, 0));
+          // Fall through to continue processing as a type reference.
+          next = token.next;
+        } else if (!next.isIdentifier) {
+          if (identical(value, 'void')) {
+            looksLikeTypeRef = true;
+            // Found a type reference, but the period
+            // and preceding identifier are both invalid.
+            reportRecoverableErrorWithToken(
+                token, fasta.templateUnexpectedToken);
+            // Fall through to continue processing as a type reference.
+          } else {
+            // No type reference.
+            return beforeStart;
+          }
+        }
+      }
+      token = next;
+      next = token.next;
+    }
+
+    if (optional('<', next)) {
+      looksLikeTypeRef = true;
+      token = next.endGroup;
+      if (token == null) {
+        // TODO(danrubel): Consider better recovery
+        // because this is probably a type reference.
+        return beforeStart;
+      }
+      next = token.next;
+      if (optional('(', next)) {
+        // No type reference - e.g. `f<E>()`.
+        return beforeStart;
+      }
+    }
+
+    if (optional('Function', next)) {
+      looksLikeTypeRef = true;
+      token = skipGenericFunctionType(next);
+      next = token.next;
+    }
+
+    return next.isIdentifier ||
+            (next.isOperator && !optional('=', next)) ||
+            looksLikeTypeRef
+        ? token
+        : beforeStart;
   }
 
   bool isValidTypeReference(Token token) {
     int kind = token.kind;
     if (IDENTIFIER_TOKEN == kind) return true;
     if (KEYWORD_TOKEN == kind) {
-      String value = token.type.lexeme;
-      return token.type.isPseudo ||
+      TokenType type = token.type;
+      String value = type.lexeme;
+      return type.isPseudo ||
+          (type.isBuiltIn && optional('.', token.next)) ||
           (identical(value, 'dynamic')) ||
           (identical(value, 'void'));
     }
@@ -1253,7 +1551,7 @@ class Parser {
   /// ```
   Token parseQualified(Token token, IdentifierContext context,
       IdentifierContext continuationContext) {
-    token = ensureIdentifier(token.next, context);
+    token = ensureIdentifier(token, context);
     while (optional('.', token.next)) {
       token = parseQualifiedRest(token, continuationContext);
     }
@@ -1283,16 +1581,13 @@ class Parser {
     token = token.next;
     assert(optional('.', token));
     Token period = token;
-    token = ensureIdentifier(token.next, context);
+    token = ensureIdentifier(token, context);
     listener.handleQualified(period);
     return token;
   }
 
   Token skipBlock(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
-    if (!optional('{', token)) {
-      token = recoverFromMissingBlock(token);
-    }
+    token = ensureBlock(token, null);
     Token closeBrace = closeBraceTokenFor(token);
     if (closeBrace == null ||
         !identical(closeBrace.kind, $CLOSE_CURLY_BRACKET)) {
@@ -1311,8 +1606,7 @@ class Parser {
     assert(optional('enum', enumKeyword));
     listener.beginEnum(enumKeyword);
     token =
-        ensureIdentifier(enumKeyword.next, IdentifierContext.enumDeclaration)
-            .next;
+        ensureIdentifier(enumKeyword, IdentifierContext.enumDeclaration).next;
     Token leftBrace = token;
     expect('{', token);
     int count = 0;
@@ -1327,11 +1621,11 @@ class Parser {
       }
       token = parseMetadataStar(token);
       if (!identical(token.next, next)) {
-        reportRecoverableError(next, fasta.messageAnnotationOnEnumConstant);
+        listener.handleRecoverableError(
+            fasta.messageAnnotationOnEnumConstant, next, token);
       }
       token =
-          ensureIdentifier(token.next, IdentifierContext.enumValueDeclaration)
-              .next;
+          ensureIdentifier(token, IdentifierContext.enumValueDeclaration).next;
       count++;
     } while (optional(',', token));
     expect('}', token);
@@ -1340,21 +1634,20 @@ class Parser {
   }
 
   Token parseClassOrNamedMixinApplication(
-      Token beforeAbstractToken, Token token) {
-    // TODO(brianwilkerson): Move `token` to be the first parameter.
+      Token token, Token beforeAbstractToken) {
     token = token.next;
     listener.beginClassOrNamedMixinApplication(token);
     Token begin = beforeAbstractToken?.next ?? token;
     if (beforeAbstractToken != null) {
-      token = parseModifier(beforeAbstractToken.next).next;
+      token = parseModifier(beforeAbstractToken).next;
       listener.handleModifiers(1);
     } else {
       listener.handleModifiers(0);
     }
     Token classKeyword = token;
     expect("class", token);
-    Token name = ensureIdentifier(
-        token.next, IdentifierContext.classOrNamedMixinDeclaration);
+    Token name =
+        ensureIdentifier(token, IdentifierContext.classOrNamedMixinDeclaration);
     token = parseTypeVariablesOpt(name);
     if (optional('=', token.next)) {
       listener.beginNamedMixinApplication(begin, name);
@@ -1395,18 +1688,18 @@ class Parser {
   /// ```
   Token parseClass(Token token, Token begin, Token classKeyword) {
     Token start = token;
-    token = parseClassHeader(token, begin, classKeyword);
+    token = parseClassHeaderOpt(token, begin, classKeyword);
     if (!optional('{', token.next)) {
       // Recovery
       token = parseClassHeaderRecovery(start, begin, classKeyword);
+      ensureBlock(token, fasta.templateExpectedClassBody);
     }
-    token = parseClassBody(token, start.next);
+    token = parseClassBody(token);
     listener.endClassDeclaration(begin, token);
     return token;
   }
 
-  Token parseClassHeader(Token token, Token begin, Token classKeyword) {
-    // TODO(brianwilkerson): Rename to `parseClassHeaderOpt`?
+  Token parseClassHeaderOpt(Token token, Token begin, Token classKeyword) {
     token = parseClassExtendsOpt(token);
     token = parseClassImplementsOpt(token);
     Token nativeToken;
@@ -1426,7 +1719,7 @@ class Parser {
     // Reparse to determine which clauses have already been parsed
     // but intercept the events so they are not sent to the primary listener.
     listener = recoveryListener;
-    token = parseClassHeader(token, begin, classKeyword);
+    token = parseClassHeaderOpt(token, begin, classKeyword);
     bool hasExtends = recoveryListener.extendsKeyword != null;
     bool hasImplements = recoveryListener.implementsKeyword != null;
     Token withKeyword = recoveryListener.withKeyword;
@@ -1454,9 +1747,9 @@ class Parser {
         Token extendsKeyword =
             new SyntheticKeywordToken(Keyword.EXTENDS, next.offset);
         Token superclassToken = new SyntheticStringToken(
-            TokenType.IDENTIFIER, 'Object', next.offset);
-        rewriter.insertToken(extendsKeyword, next);
-        rewriter.insertToken(superclassToken, next);
+            TokenType.IDENTIFIER, 'Object', next.offset, 0);
+        rewriter.insertTokenAfter(token, extendsKeyword);
+        rewriter.insertTokenAfter(extendsKeyword, superclassToken);
         token = parseType(extendsKeyword);
         token = parseMixinApplicationRest(token);
         listener.handleClassExtends(extendsKeyword);
@@ -1529,7 +1822,7 @@ class Parser {
       }
       listener.handleClassExtends(extendsKeyword);
     } else {
-      listener.handleNoType(next);
+      listener.handleNoType(token);
       listener.handleClassExtends(null);
     }
     return token;
@@ -1565,19 +1858,17 @@ class Parser {
     return token;
   }
 
-  /// Insert a synthetic identifier before the given [token] and create an error
+  /// Insert a synthetic identifier after the given [token] and create an error
   /// message based on the given [context]. Return the synthetic identifier that
   /// was inserted.
   Token insertSyntheticIdentifier(Token token, IdentifierContext context,
       [String stringValue]) {
-    // TODO(brianwilkerson) Accept the last consumed token.
+    Token next = token.next;
     stringValue ??= '';
-    Message message = context.recoveryTemplate.withArguments(token);
+    Message message = context.recoveryTemplate.withArguments(next);
     Token identifier = new SyntheticStringToken(
-        TokenType.IDENTIFIER, stringValue, token.charOffset, 0);
-    // TODO(brianwilkerson): Remove the invocation of `previous` when this
-    // method accepts the last consumed token.
-    return rewriteAndRecover(token.previous, message, identifier);
+        TokenType.IDENTIFIER, stringValue, next.charOffset, 0);
+    return rewriteAndRecover(token, message, identifier).next;
   }
 
   /// Parse a simple identifier at the given [token], and return the identifier
@@ -1587,77 +1878,110 @@ class Parser {
   /// identifier in the given [context], create a synthetic identifier, report
   /// an error, and return the synthetic identifier.
   Token ensureIdentifier(Token token, IdentifierContext context) {
-    // TODO(brianwilkerson) Accept the last consumed token.
-    if (!token.isIdentifier) {
-      if (optional("void", token)) {
-        reportRecoverableError(token, fasta.messageInvalidVoid);
-      } else if (token is ErrorToken) {
+    Token next = token.next;
+    if (!next.isIdentifier) {
+      if (optional("void", next)) {
+        reportRecoverableError(next, fasta.messageInvalidVoid);
+        token = next;
+      } else if (next is ErrorToken) {
         // TODO(brianwilkerson): This preserves the current semantics, but the
         // listener should not be recovering from this case, so this needs to be
         // reworked to recover in this method (probably inside the outermost
         // if statement).
         token =
-            reportUnrecoverableErrorWithToken(token, context.recoveryTemplate)
+            reportUnrecoverableErrorWithToken(next, context.recoveryTemplate)
                 .next;
-      } else if (isIdentifierForRecovery(token, context)) {
-        reportRecoverableErrorWithToken(token, context.recoveryTemplate);
-      } else if (isPostIdentifierForRecovery(token, context) ||
-          isStartOfNextSibling(token, context)) {
+      } else if (isIdentifierForRecovery(next, context)) {
+        reportRecoverableErrorWithToken(next, context.recoveryTemplate);
+        token = next;
+      } else if (isPostIdentifierForRecovery(next, context) ||
+          isStartOfNextSibling(next, context)) {
         token = insertSyntheticIdentifier(token, context);
-      } else if (token.isKeywordOrIdentifier) {
-        reportRecoverableErrorWithToken(token, context.recoveryTemplate);
-      } else if (token.isUserDefinableOperator &&
+      } else if (next.isKeywordOrIdentifier) {
+        reportRecoverableErrorWithToken(next, context.recoveryTemplate);
+        token = next;
+      } else if (next.isUserDefinableOperator &&
           context == IdentifierContext.methodDeclaration) {
-        // If this is a user definable operator,
-        // then assume that the user has forgotten the `operator` keyword.
-        // TODO(brianwilkerson): Remove the invocation of `previous` when this
-        // method accepts the last consumed token.
-        token = rewriteAndRecover(
-            token.previous,
-            fasta.messageMissingOperatorKeyword,
-            new SyntheticKeywordToken(Keyword.OPERATOR, token.offset));
+        // If this is a user definable operator, then assume that the user has
+        // forgotten the `operator` keyword.
+        token = rewriteAndRecover(token, fasta.messageMissingOperatorKeyword,
+            new SyntheticKeywordToken(Keyword.OPERATOR, next.offset));
         return parseOperatorName(token);
       } else {
-        reportRecoverableErrorWithToken(token, context.recoveryTemplate);
+        reportRecoverableErrorWithToken(next, context.recoveryTemplate);
         if (context == IdentifierContext.methodDeclaration) {
-          // Since the token is not a keyword or identifier,
-          // consume it to ensure forward progress in parseMethod.
-          token = token.next;
+          // Since the token is not a keyword or identifier, consume it to
+          // ensure forward progress in parseMethod.
+          token = next.next;
           // Supply a non-empty method name so that it does not accidentally
           // match the default constructor.
           token = insertSyntheticIdentifier(
-              token, context, '#synthetic_method_name_${token.offset}');
+              next, context, '#synthetic_method_name_${token.offset}');
         } else if (context == IdentifierContext.topLevelVariableDeclaration ||
             context == IdentifierContext.fieldDeclaration) {
-          // Since the token is not a keyword or identifier,
-          // consume it to ensure forward progress in parseField.
-          token = token.next;
+          // Since the token is not a keyword or identifier, consume it to
+          // ensure forward progress in parseField.
+          token = next.next;
           // Supply a non-empty method name so that it does not accidentally
           // match the default constructor.
           token = insertSyntheticIdentifier(
-              token, context, '#synthetic_field_name_${token.offset}');
+              next, context, '#synthetic_field_name_${token.offset}');
+        } else if (context == IdentifierContext.constructorReference) {
+          token = insertSyntheticIdentifier(token, context);
+        } else {
+          token = next;
         }
       }
-    } else if (token.type.isBuiltIn && !context.isBuiltInIdentifierAllowed) {
+    } else if (next.type.isBuiltIn && !context.isBuiltInIdentifierAllowed) {
       if (context.inDeclaration) {
         reportRecoverableErrorWithToken(
-            token, fasta.templateBuiltInIdentifierInDeclaration);
-      } else if (!optional("dynamic", token)) {
-        reportRecoverableErrorWithToken(
-            token, fasta.templateBuiltInIdentifierAsType);
+            next, fasta.templateBuiltInIdentifierInDeclaration);
+      } else if (!optional("dynamic", next)) {
+        if (context == IdentifierContext.typeReference &&
+            optional('.', next.next)) {
+          // Built in identifiers may be used as a prefix
+        } else {
+          reportRecoverableErrorWithToken(
+              next, fasta.templateBuiltInIdentifierAsType);
+        }
       }
-    } else if (!inPlainSync && token.type.isPseudo) {
-      if (optional('await', token)) {
-        reportRecoverableError(token, fasta.messageAwaitAsIdentifier);
-      } else if (optional('yield', token)) {
-        reportRecoverableError(token, fasta.messageYieldAsIdentifier);
-      } else if (optional('async', token)) {
-        reportRecoverableError(token, fasta.messageAsyncAsIdentifier);
+      token = next;
+    } else if (!inPlainSync && next.type.isPseudo) {
+      if (optional('await', next)) {
+        reportRecoverableError(next, fasta.messageAwaitAsIdentifier);
+      } else if (optional('yield', next)) {
+        reportRecoverableError(next, fasta.messageYieldAsIdentifier);
+      } else if (optional('async', next)) {
+        reportRecoverableError(next, fasta.messageAsyncAsIdentifier);
       }
+      token = next;
+    } else {
+      token = next;
     }
     listener.handleIdentifier(token, context);
     return token;
   }
+
+  /// Return `true` if the given [token] should be treated like the start of
+  /// an expression for the purposes of recovery.
+  bool isExpressionStartForRecovery(Token next) =>
+      next.isKeywordOrIdentifier ||
+      next.type == TokenType.DOUBLE ||
+      next.type == TokenType.HASH ||
+      next.type == TokenType.HEXADECIMAL ||
+      next.type == TokenType.IDENTIFIER ||
+      next.type == TokenType.INT ||
+      next.type == TokenType.STRING ||
+      optional('{', next) ||
+      optional('(', next) ||
+      optional('[', next) ||
+      optional('[]', next) ||
+      optional('<', next) ||
+      optional('!', next) ||
+      optional('-', next) ||
+      optional('~', next) ||
+      optional('++', next) ||
+      optional('--', next);
 
   /// Return `true` if the given [token] should be treated like an identifier in
   /// the given [context] for the purposes of recovery.
@@ -1677,8 +2001,12 @@ class Parser {
     List<String> followingValues;
     if (context == IdentifierContext.classOrNamedMixinDeclaration) {
       followingValues = ['<', 'extends', 'with', 'implements', '{'];
+    } else if (context == IdentifierContext.combinator) {
+      followingValues = [';'];
+    } else if (context == IdentifierContext.constructorReferenceContinuation) {
+      followingValues = ['.', ',', '(', ')', '[', ']', '}', ';'];
     } else if (context == IdentifierContext.fieldDeclaration) {
-      followingValues = [';', '=', ','];
+      followingValues = [';', '=', ',', '}'];
     } else if (context == IdentifierContext.enumDeclaration) {
       followingValues = ['{'];
     } else if (context == IdentifierContext.enumValueDeclaration) {
@@ -1689,6 +2017,7 @@ class Parser {
         return true;
       }
       followingValues = [
+        '.',
         ',',
         '(',
         ')',
@@ -1719,7 +2048,7 @@ class Parser {
         context == IdentifierContext.localFunctionDeclarationContinuation) {
       followingValues = ['.', '(', '{', '=>'];
     } else if (context == IdentifierContext.localVariableDeclaration) {
-      followingValues = [';', '=', ','];
+      followingValues = [';', '=', ',', '}'];
     } else if (context == IdentifierContext.methodDeclaration ||
         context == IdentifierContext.methodDeclarationContinuation) {
       followingValues = ['.', '(', '{', '=>'];
@@ -1854,15 +2183,14 @@ class Parser {
   Token parseTypeVariable(Token token) {
     listener.beginTypeVariable(token.next);
     token = parseMetadataStar(token);
-    token =
-        ensureIdentifier(token.next, IdentifierContext.typeVariableDeclaration);
+    token = ensureIdentifier(token, IdentifierContext.typeVariableDeclaration);
     Token extendsOrSuper = null;
     Token next = token.next;
     if (optional('extends', next) || optional('super', next)) {
       extendsOrSuper = next;
       token = parseType(next);
     } else {
-      listener.handleNoType(next);
+      listener.handleNoType(token);
     }
     listener.endTypeVariable(token.next, extendsOrSuper);
     return token;
@@ -1889,7 +2217,6 @@ class Parser {
   }
 
   bool notEofOrValue(String value, Token token) {
-    // TODO(brianwilkerson): Move `token` to be the first parameter.
     return !identical(token.kind, EOF_TOKEN) &&
         !identical(value, token.stringValue);
   }
@@ -1906,9 +2233,13 @@ class Parser {
   Token parseType(Token token,
       [TypeContinuation continuation = TypeContinuation.Required,
       IdentifierContext continuationContext,
-      MemberKind memberKind]) {
+      MemberKind memberKind,
+      Token varFinalOrConst]) {
     /// True if we've seen the `var` keyword.
     bool hasVar = false;
+
+    /// The token before [token].
+    Token beforeToken;
 
     /// The token before the `begin` token.
     Token beforeBegin;
@@ -1951,31 +2282,29 @@ class Parser {
         // analyze the tokens following the const keyword.
         assert(optional("const", token.next));
         beforeBegin = token;
-        begin = token.next;
-        token = listener.injectGenericCommentTypeAssign(begin.next);
-        assert(begin.next == token);
+        begin = beforeToken = token.next;
+        token = beforeToken.next;
       } else {
-        // Modify [begin] in case generic type are injected from a comment.
-        begin = token = listener.injectGenericCommentTypeAssign(token.next);
-        // TODO(brianwilkerson): Remove the invocation of `previous` when
-        // `injectGenericCommentTypeAssign` returns the last consumed token.
-        beforeBegin = begin.previous;
+        beforeToken = beforeBegin = token;
+        token = begin = token.next;
       }
 
       if (optional("void", token)) {
         // `void` is a type.
         looksLikeType = true;
-        voidToken = token;
+        beforeToken = voidToken = token;
         token = token.next;
       } else if (isValidTypeReference(token) &&
           !isGeneralizedFunctionType(token)) {
         // We're looking at an identifier that could be a type (or `dynamic`).
         looksLikeType = true;
+        beforeToken = token;
         token = token.next;
         if (optional(".", token) && isValidTypeReference(token.next)) {
           // We're looking at `prefix '.' identifier`.
           context = IdentifierContext.prefixedTypeReference;
-          token = token.next.next;
+          beforeToken = token.next;
+          token = beforeToken.next;
         }
         if (optional("<", token)) {
           Token close = closeBraceTokenFor(token);
@@ -1983,9 +2312,14 @@ class Parser {
               (optional(">", close) || optional(">>", close))) {
             // We found some type arguments.
             typeArguments = token;
+            beforeToken = close;
             token = close.next;
           }
         }
+      } else if (token.isModifier && isValidTypeReference(token.next)) {
+        // Recovery - report error and skip modifier
+        reportRecoverableErrorWithToken(token, fasta.templateExpectedType);
+        return parseType(token, continuation, continuationContext, memberKind);
       }
 
       // If what we have seen so far looks like a type, that could be a return
@@ -1997,6 +2331,7 @@ class Parser {
         if (optional("<", token.next)) {
           Token close = closeBraceTokenFor(token.next);
           if (close != null && optional(">", close)) {
+            beforeToken = previousToken(token, close);
             token = close;
           } else {
             break; // Not a function type.
@@ -2010,6 +2345,7 @@ class Parser {
           functionTypes++;
           typeVariableStarters =
               typeVariableStarters.prepend(typeVariableStart);
+          beforeToken = close;
           token = close.next;
         } else {
           break; // Not a function type.
@@ -2033,58 +2369,49 @@ class Parser {
         // A function type without return type.
         // Push the non-existing return type first. The loop below will
         // generate the full type.
-        listener.handleNoType(begin);
-        token = begin;
-      } else if (functionTypes > 0 && voidToken != null) {
+        listener.handleNoType(beforeBegin);
+        token = beforeBegin;
+      } else if (voidToken != null) {
         listener.handleVoidKeyword(voidToken);
-        token = voidToken.next;
+        token = voidToken;
       } else {
-        token = ensureIdentifier(beforeBegin.next, context);
+        token = ensureIdentifier(beforeBegin, context);
         token = parseQualifiedRestOpt(
             token, IdentifierContext.typeReferenceContinuation);
         assert(typeArguments == null || typeArguments == token.next);
-        token = parseTypeArgumentsOpt(token).next;
-        listener.handleType(begin, token);
-      }
-
-      {
-        Token newBegin =
-            listener.replaceTokenWithGenericCommentTypeAssign(begin, token);
-        if (!identical(newBegin, begin)) {
-          listener.discardTypeReplacedWithCommentTypeAssign();
-          // TODO(brianwilkerson): Remove the invocation of `previous` when
-          // `replaceTokenWithGenericCommentTypeAssign` returns the last
-          // consumed token.
-          return parseType(newBegin.previous);
-        }
+        token = parseTypeArgumentsOpt(token);
+        listener.handleType(begin, token.next);
       }
 
       for (int i = 0; i < functionTypes; i++) {
-        assert(optional('Function', token));
-        Token functionToken = token;
-        if (optional("<", token.next)) {
+        Token next = token.next;
+        assert(optional('Function', next));
+        Token functionToken = next;
+        if (optional("<", next.next)) {
           // Skip type parameters, they were parsed above.
-          token = closeBraceTokenFor(token.next);
+          next = closeBraceTokenFor(next.next);
         }
         token = parseFormalParametersRequiredOpt(
-                token, MemberKind.GeneralizedFunctionType)
-            .next;
-        listener.endFunctionType(functionToken, token);
+            next, MemberKind.GeneralizedFunctionType);
+        listener.endFunctionType(functionToken, token.next);
       }
 
       if (hasVar) {
         reportRecoverableError(begin, fasta.messageTypeAfterVar);
       }
 
-      // TODO(brianwilkerson): Remove the invocation of `previous` when
-      // this method accepts the last consumed token.
-      return token.previous;
+      return token;
     }
 
-    /// Returns true if [kind] is '=', ';', or ',', that is, if [kind] could be
-    /// the end of a variable declaration.
+    /// Returns true if [kind] could be the end of a variable declaration.
     bool looksLikeVariableDeclarationEnd(int kind) {
-      return EQ_TOKEN == kind || SEMICOLON_TOKEN == kind || COMMA_TOKEN == kind;
+      return EQ_TOKEN == kind ||
+          SEMICOLON_TOKEN == kind ||
+          COMMA_TOKEN == kind ||
+          // Recovery: Return true for these additional invalid situations
+          // in which we assume a missing semicolon.
+          OPEN_CURLY_BRACKET_TOKEN == kind ||
+          CLOSE_CURLY_BRACKET_TOKEN == kind;
     }
 
     /// Returns true if [token] could be the start of a function body.
@@ -2124,10 +2451,8 @@ class Parser {
               memberKind == MemberKind.StaticField) {
             reportRecoverableError(
                 begin, fasta.messageMissingConstFinalVarOrType);
-            listener.handleNoType(begin);
-            // TODO(brianwilkerson): Remove the invocation of `previous` when
-            // this method accepts the last consumed token.
-            return begin.previous;
+            listener.handleNoType(beforeBegin);
+            return beforeBegin;
           }
         }
         return commitType();
@@ -2146,10 +2471,8 @@ class Parser {
             return commitType(); // Parse type.
           }
         }
-        listener.handleNoType(begin);
-        // TODO(brianwilkerson): Remove the invocation of `previous` when
-        // this method accepts the last consumed token.
-        return begin.previous;
+        listener.handleNoType(beforeBegin);
+        return beforeBegin;
 
       case TypeContinuation.OptionalAfterVar:
         hasVar = true;
@@ -2164,7 +2487,7 @@ class Parser {
       case TypeContinuation.ExpressionStatementOrDeclaration:
         assert(begin.isIdentifier || identical(begin.stringValue, 'void'));
         if (!inPlainSync && optional("await", begin)) {
-          return parseExpressionStatement(begin);
+          return parseExpressionStatement(beforeBegin);
         }
 
         if (looksLikeType && token.isIdentifier) {
@@ -2177,9 +2500,7 @@ class Parser {
 
             // TODO(ahe): Generate type events and call
             // parseVariablesDeclarationRest instead.
-            // TODO(brianwilkerson): Remove the invocation of `previous` when
-            // this method accepts the last consumed token.
-            return parseVariablesDeclaration(begin.previous);
+            return parseVariablesDeclaration(beforeBegin);
           } else if (OPEN_PAREN_TOKEN == afterIdKind) {
             // We are looking at `type identifier '('`.
             if (looksLikeFunctionBody(closeBraceTokenFor(afterId).next)) {
@@ -2197,7 +2518,8 @@ class Parser {
               } else {
                 commitType();
               }
-              return parseNamedFunctionRest(begin, token, beforeFormals, false);
+              return parseNamedFunctionRest(
+                  beforeToken, begin, beforeFormals, false);
             }
           } else if (identical(afterIdKind, LT_TOKEN)) {
             // We are looking at `type identifier '<'`.
@@ -2217,15 +2539,16 @@ class Parser {
                   commitType();
                 }
                 return parseNamedFunctionRest(
-                    begin, token, beforeFormals, false);
+                    beforeToken, begin, beforeFormals, false);
               }
             }
           }
           // Fall-through to expression statement.
         } else {
+          beforeToken = beforeBegin;
           token = begin;
           if (optional(':', token.next)) {
-            return parseLabeledStatement(token);
+            return parseLabeledStatement(beforeToken);
           } else if (optional('(', token.next)) {
             if (looksLikeFunctionBody(closeBraceTokenFor(token.next).next)) {
               // We are looking at `identifier '(' ... ')'` followed by `'{'`,
@@ -2238,7 +2561,7 @@ class Parser {
               listener.beginLocalFunctionDeclaration(token);
               listener.handleModifiers(0);
               listener.handleNoType(token);
-              return parseNamedFunctionRest(begin, token, formals, false);
+              return parseNamedFunctionRest(beforeToken, begin, formals, false);
             }
           } else if (optional('<', token.next)) {
             Token gt = closeBraceTokenFor(token.next);
@@ -2250,13 +2573,13 @@ class Parser {
                 listener.beginLocalFunctionDeclaration(token);
                 listener.handleModifiers(0);
                 listener.handleNoType(token);
-                return parseNamedFunctionRest(begin, token, gt, false);
+                return parseNamedFunctionRest(beforeToken, begin, gt, false);
               }
             }
             // Fall through to expression statement.
           }
         }
-        return parseExpressionStatement(begin);
+        return parseExpressionStatement(beforeBegin);
 
       case TypeContinuation.ExpressionStatementOrConstDeclaration:
         Token identifier;
@@ -2272,28 +2595,29 @@ class Parser {
 
             // TODO(ahe): Generate type events and call
             // parseVariablesDeclarationRest instead.
-            // TODO(brianwilkerson): Remove the invocation of `previous` when
-            // this method accepts the last consumed token.
-            return parseVariablesDeclaration(begin.previous);
+            return parseVariablesDeclaration(beforeBegin);
           }
           // Fall-through to expression statement.
         }
 
-        return parseExpressionStatement(begin);
+        return parseExpressionStatement(beforeBegin);
 
       case TypeContinuation.SendOrFunctionLiteral:
+        Token beforeName;
         Token name;
         bool hasReturnType;
         if (looksLikeType && looksLikeFunctionDeclaration(token)) {
+          beforeName = beforeToken;
           name = token;
           hasReturnType = true;
           // Fall-through to parseNamedFunctionRest below.
         } else if (looksLikeFunctionDeclaration(begin)) {
+          beforeName = beforeBegin;
           name = begin;
           hasReturnType = false;
           // Fall-through to parseNamedFunctionRest below.
         } else {
-          return parseSend(begin, continuationContext);
+          return parseSend(beforeBegin, continuationContext);
         }
 
         Token formals = parseTypeVariablesOpt(name);
@@ -2308,21 +2632,19 @@ class Parser {
           reportRecoverableError(
               begin, fasta.messageReturnTypeFunctionExpression);
         } else {
-          listener.handleNoType(begin);
+          listener.handleNoType(formals);
         }
-        return parseNamedFunctionRest(begin, name, formals, true);
+        if (beforeName.next != name)
+          throw new StateError("beforeName.next != name");
+        return parseNamedFunctionRest(beforeName, begin, formals, true);
 
       case TypeContinuation.VariablesDeclarationOrExpression:
-        if (looksLikeType &&
-            token.isIdentifier &&
-            isOneOf4(token.next, '=', ';', ',', 'in')) {
+        if (looksLikeType && token.isIdentifier) {
           // TODO(ahe): Generate type events and call
           // parseVariablesDeclarationNoSemicolonRest instead.
-          // TODO(brianwilkerson): Remove the invocation of `previous` when
-          // this method accepts the last consumed token.
-          return parseVariablesDeclarationNoSemicolon(begin.previous);
+          return parseVariablesDeclarationNoSemicolon(beforeBegin);
         }
-        return parseExpression(begin);
+        return parseExpression(beforeBegin);
 
       case TypeContinuation.NormalFormalParameter:
       case TypeContinuation.NormalFormalParameterAfterVar:
@@ -2351,19 +2673,23 @@ class Parser {
         bool untyped = false;
         if (!looksLikeType || optional("this", begin)) {
           untyped = true;
+          beforeToken = beforeBegin;
           token = begin;
         }
 
         Token thisKeyword;
         Token periodAfterThis;
+        Token beforeNameToken = beforeToken;
         Token nameToken = token;
         IdentifierContext nameContext =
             IdentifierContext.formalParameterDeclaration;
+        beforeToken = token;
         token = token.next;
         if (inFunctionType) {
           if (isNamedParameter) {
             nameContext = IdentifierContext.formalParameterDeclaration;
             if (!nameToken.isKeywordOrIdentifier) {
+              beforeToken = beforeNameToken;
               token = nameToken;
             }
           } else if (nameToken.isIdentifier) {
@@ -2371,6 +2697,7 @@ class Parser {
           } else {
             // No name required in a function type.
             nameContext = null;
+            beforeToken = beforeNameToken;
             token = nameToken;
           }
         } else if (optional('this', nameToken)) {
@@ -2380,28 +2707,39 @@ class Parser {
             Message message = fasta.templateExpectedButGot.withArguments('.');
             Token newToken =
                 new SyntheticToken(TokenType.PERIOD, token.charOffset);
-            periodAfterThis = rewriteAndRecover(thisKeyword, message, newToken);
+            periodAfterThis =
+                rewriteAndRecover(thisKeyword, message, newToken).next;
           } else {
             periodAfterThis = token;
           }
+          beforeToken = periodAfterThis;
           token = periodAfterThis.next;
           nameContext = IdentifierContext.fieldInitializer;
           if (!token.isIdentifier) {
             // Recover from a missing identifier by inserting one.
-            token = insertSyntheticIdentifier(token, nameContext);
+            token = insertSyntheticIdentifier(beforeToken, nameContext);
           }
-          nameToken = token;
+          beforeNameToken = beforeToken;
+          beforeToken = nameToken = token;
           token = token.next;
         } else if (!nameToken.isIdentifier) {
           if (optional('.', nameToken)) {
+            // Recovery:
             // Looks like a prefixed type, but missing the type and param names.
             // Set the nameToken so that a synthetic identifier is inserted
             // after the `.` token.
-            nameToken = nameToken.next;
-            token = nameToken;
+            beforeToken = beforeNameToken = nameToken;
+            token = nameToken = nameToken.next;
+          } else if (context == IdentifierContext.prefixedTypeReference) {
+            // Recovery:
+            // Looks like a prefixed type, but missing the parameter name.
+            beforeToken = nameToken =
+                insertSyntheticIdentifier(beforeNameToken, nameContext);
+            token = beforeToken.next;
           } else {
             untyped = true;
-            nameToken = begin;
+            beforeNameToken = beforeBegin;
+            beforeToken = nameToken = begin;
             token = nameToken.next;
           }
         }
@@ -2410,27 +2748,36 @@ class Parser {
           reportRecoverableError(nameToken, fasta.messagePrivateNamedParameter);
         }
 
-        // TODO(brianwilkerson): Remove the invocation of `previous` when
-        // `injectGenericCommentTypeList` returns the last consumed token.
-        Token previous = listener.injectGenericCommentTypeList(token).previous;
-        token = previous.next;
-
         Token inlineFunctionTypeStart;
         if (optional("<", token)) {
           Token closer = closeBraceTokenFor(token);
           if (closer != null) {
             if (optional("(", closer.next)) {
-              inlineFunctionTypeStart = previous;
+              if (varFinalOrConst != null) {
+                reportRecoverableError(
+                    varFinalOrConst, fasta.messageFunctionTypedParameterVar);
+              }
+              inlineFunctionTypeStart = beforeToken;
+              beforeToken = token;
               token = token.next;
             }
           }
         } else if (optional("(", token)) {
-          inlineFunctionTypeStart = previous;
-          token = closeBraceTokenFor(token).next;
+          if (varFinalOrConst != null) {
+            reportRecoverableError(
+                varFinalOrConst, fasta.messageFunctionTypedParameterVar);
+          }
+          inlineFunctionTypeStart = beforeToken;
+          beforeToken = closeBraceTokenFor(token);
+          token = beforeToken.next;
         }
 
         if (inlineFunctionTypeStart != null) {
           token = parseTypeVariablesOpt(inlineFunctionTypeStart);
+          // TODO(brianwilkerson): Figure out how to remove the invocation of
+          // `previous`. The method `parseTypeVariablesOpt` returns the last
+          // consumed token.
+          beforeToken = token.previous;
           listener
               .beginFunctionTypedFormalParameter(inlineFunctionTypeStart.next);
           if (!untyped) {
@@ -2440,13 +2787,17 @@ class Parser {
               Token saved = token;
               commitType();
               token = saved;
+              // We need to recompute the before tokens because [commitType] can
+              // cause synthetic tokens to be inserted.
+              beforeToken = previousToken(beforeToken, token);
+              beforeNameToken = previousToken(beforeNameToken, nameToken);
             }
           } else {
-            listener.handleNoType(begin);
+            listener.handleNoType(beforeToken);
           }
-          token = parseFormalParametersRequiredOpt(
-                  token, MemberKind.FunctionTypedParameter)
-              .next;
+          beforeToken = parseFormalParametersRequiredOpt(
+              token, MemberKind.FunctionTypedParameter);
+          token = beforeToken.next;
           listener.endFunctionTypedFormalParameter();
 
           // Generalized function types don't allow inline function types.
@@ -2457,15 +2808,22 @@ class Parser {
                 fasta.messageInvalidInlineFunctionType);
           }
         } else if (untyped) {
-          listener.handleNoType(begin);
+          listener.handleNoType(token);
         } else {
           Token saved = token;
           commitType();
           token = saved;
+          // We need to recompute the before tokens because [commitType] can
+          // cause synthetic tokens to be inserted.
+          beforeToken = previousToken(beforeToken, token);
+          beforeNameToken = previousToken(beforeNameToken, nameToken);
         }
 
         if (nameContext != null) {
-          nameToken = ensureIdentifier(nameToken, nameContext);
+          nameToken = ensureIdentifier(beforeNameToken, nameContext);
+          // We need to recompute the before tokens because [ensureIdentifier]
+          // can cause synthetic tokens to be inserted.
+          beforeToken = previousToken(beforeToken, token);
         } else {
           listener.handleNoName(nameToken);
         }
@@ -2473,7 +2831,8 @@ class Parser {
         String value = token.stringValue;
         if ((identical('=', value)) || (identical(':', value))) {
           Token equal = token;
-          token = parseExpression(token.next).next;
+          beforeToken = parseExpression(token);
+          token = beforeToken.next;
           listener.handleValuedFormalParameter(equal, token);
           if (isMandatoryFormalParameterKind(parameterKind)) {
             reportRecoverableError(
@@ -2493,70 +2852,45 @@ class Parser {
         }
         listener.endFormalParameter(
             thisKeyword, periodAfterThis, nameToken, parameterKind, memberKind);
-
-        // TODO(brianwilkerson): Remove the invocation of `previous` when this
-        // method accepts the last consumed token.
-        return token.previous;
+        return beforeToken;
     }
 
     throw "Internal error: Unhandled continuation '$continuation'.";
   }
 
   Token parseTypeArgumentsOpt(Token token) {
-    return parseStuff(
+    return parseStuffOpt(
         token,
         (t) => listener.beginTypeArguments(t),
-        (t) => parseType(t).next,
+        (t) => parseType(t),
         (c, bt, et) => listener.endTypeArguments(c, bt, et),
         (t) => listener.handleNoTypeArguments(t));
   }
 
   Token parseTypeVariablesOpt(Token token) {
-    return parseStuff(
+    return parseStuffOpt(
         token,
         (t) => listener.beginTypeVariables(t),
-        (t) => parseTypeVariable(t).next,
+        (t) => parseTypeVariable(t),
         (c, bt, et) => listener.endTypeVariables(c, bt, et),
         (t) => listener.handleNoTypeVariables(t));
   }
 
   /// TODO(ahe): Clean this up.
-  Token parseStuff(Token token, Function beginStuff, Function stuffParser,
+  Token parseStuffOpt(Token token, Function beginStuff, Function stuffParser,
       Function endStuff, Function handleNoStuff) {
-    // TODO(brianwilkerson): Rename to `parseStuffOpt`?
-    // TODO(brianwilkerson): Remove the invocation of `previous` when
-    // `injectGenericCommentTypeList` returns the last consumed token.
-    token = listener.injectGenericCommentTypeList(token.next).previous;
     Token next = token.next;
     if (optional('<', next)) {
-      token = next;
-      Token begin = token;
+      BeginToken begin = next;
+      rewriteLtEndGroupOpt(begin);
       beginStuff(begin);
       int count = 0;
       do {
-        token = stuffParser(token);
+        token = stuffParser(token.next);
         ++count;
-      } while (optional(',', token));
-
-      // Rewrite `>>`, `>=`, and `>>=` tokens
-      String value = token.stringValue;
-      if (value != null && value.length > 1) {
-        Token replacement = new Token(TokenType.GT, token.charOffset);
-        if (identical(value, '>>')) {
-          replacement.next = new Token(TokenType.GT, token.charOffset + 1);
-          token = rewriter.replaceToken(token, replacement);
-        } else if (identical(value, '>=')) {
-          replacement.next = new Token(TokenType.EQ, token.charOffset + 1);
-          token = rewriter.replaceToken(token, replacement);
-        } else if (identical(value, '>>=')) {
-          replacement.next = new Token(TokenType.GT, token.charOffset + 1);
-          replacement.next.next = new Token(TokenType.EQ, token.charOffset + 2);
-          token = rewriter.replaceToken(token, replacement);
-        }
-      }
-
+      } while (optional(',', token.next));
+      token = begin.endToken = ensureGt(token);
       endStuff(count, begin, token);
-      expect('>', token);
       return token;
     }
     handleNoStuff(next);
@@ -2565,179 +2899,262 @@ class Parser {
 
   Token parseTopLevelMember(Token token) {
     Token beforeStart = token;
-    token = token.next;
-    listener.beginTopLevelMember(token);
+    Token next = token.next;
+    listener.beginTopLevelMember(next);
 
-    Link<Token> identifiers = findMemberName(beforeStart);
-    if (identifiers.isEmpty) {
-      return reportUnrecoverableErrorWithToken(
-          token, fasta.templateExpectedDeclaration);
-    }
-    Token afterName = identifiers.head.next;
-    identifiers = identifiers.tail;
+    Token externalToken;
+    Token varFinalOrConst;
+    TypeContinuation typeContinuation;
 
-    if (identifiers.isEmpty) {
-      return reportUnrecoverableErrorWithToken(
-          token, fasta.templateExpectedDeclaration);
-    }
-    Token beforeName = identifiers.head;
-    identifiers = identifiers.tail;
-    Token getOrSet;
-    if (!identifiers.isEmpty) {
-      String value = identifiers.head.next.stringValue;
-      if ((identical(value, 'get')) || (identical(value, 'set'))) {
-        getOrSet = identifiers.head.next;
-        identifiers = identifiers.tail;
+    if (isModifier(next)) {
+      if (optional('external', next)) {
+        externalToken = token = next;
+        next = token.next;
       }
-    }
-    Token beforeType;
-    if (!identifiers.isEmpty) {
-      if (isValidTypeReference(identifiers.head.next)) {
-        beforeType = identifiers.head;
-        identifiers = identifiers.tail;
-      }
-    }
-
-    token = afterName;
-    bool isField;
-    while (true) {
-      // Loop to allow the listener to rewrite the token stream for
-      // error handling.
-      final String value = token.stringValue;
-      if ((identical(value, '(')) ||
-          (identical(value, '{')) ||
-          (identical(value, '=>'))) {
-        isField = false;
-        break;
-      } else if ((identical(value, '=')) || (identical(value, ','))) {
-        isField = true;
-        break;
-      } else if (identical(value, ';')) {
-        if (getOrSet != null) {
-          // If we found a "get" keyword, this must be an abstract
-          // getter.
-          isField = (!identical(getOrSet.stringValue, 'get'));
-          // TODO(ahe): This feels like a hack.
-        } else {
-          isField = true;
+      if (isModifier(next)) {
+        if (optional('final', next)) {
+          typeContinuation = TypeContinuation.Optional;
+          varFinalOrConst = token = next;
+          next = token.next;
+        } else if (optional('var', next)) {
+          typeContinuation = TypeContinuation.OptionalAfterVar;
+          varFinalOrConst = token = next;
+          next = token.next;
+        } else if (optional('const', next)) {
+          typeContinuation = TypeContinuation.Optional;
+          varFinalOrConst = token = next;
+          next = token.next;
         }
-        break;
-      } else {
-        token = reportUnexpectedToken(token);
-        if (identical(token.next.kind, EOF_TOKEN)) return token;
+        if (isModifier(next)) {
+          ModifierRecoveryContext2 context = new ModifierRecoveryContext2(this);
+          token = context.parseTopLevelModifiers(token, typeContinuation,
+              externalToken: externalToken, varFinalOrConst: varFinalOrConst);
+          next = token.next;
+
+          typeContinuation = context.typeContinuation;
+          externalToken = context.externalToken;
+          varFinalOrConst = context.varFinalOrConst;
+          context = null;
+        }
       }
     }
-    Token afterModifiers =
-        identifiers.isNotEmpty ? identifiers.head.next.next : beforeStart.next;
-    return isField
-        ? parseFields(beforeStart, identifiers.reverse(), beforeType?.next,
-            beforeName, true)
-        : parseTopLevelMethod(
-            beforeStart, afterModifiers, beforeType, getOrSet, beforeName);
+    typeContinuation ??= TypeContinuation.Required;
+
+    Token beforeType = token;
+    // TODO(danrubel): Consider changing the listener contract
+    // so that the type reference can be parsed immediately
+    // rather than skipped now and parsed later.
+    token = skipTypeReferenceOpt(token);
+    if (token == beforeType) {
+      // There is no type reference.
+      beforeType = null;
+    }
+    next = token.next;
+
+    Token getOrSet;
+    String value = next.stringValue;
+    if (identical(value, 'get') || identical(value, 'set')) {
+      if (next.next.isIdentifier) {
+        getOrSet = token = next;
+        next = token.next;
+      }
+    }
+
+    if (next.type != TokenType.IDENTIFIER) {
+      value = next.stringValue;
+      if (identical(value, 'factory') || identical(value, 'operator')) {
+        // `factory` and `operator` can be used as an identifier.
+        value = next.next.stringValue;
+        if (getOrSet == null &&
+            !identical(value, '(') &&
+            !identical(value, '{') &&
+            !identical(value, '<') &&
+            !identical(value, '=>') &&
+            !identical(value, '=') &&
+            !identical(value, ';') &&
+            !identical(value, ',')) {
+          // Recovery
+          value = next.stringValue;
+          if (identical(value, 'factory')) {
+            reportRecoverableError(
+                next, fasta.messageFactoryTopLevelDeclaration);
+          } else {
+            reportRecoverableError(next, fasta.messageTopLevelOperator);
+            if (next.next.isOperator) {
+              token = next;
+              next = token.next;
+              if (optional('(', next.next)) {
+                rewriter.insertTokenAfter(
+                    next,
+                    new SyntheticStringToken(
+                        TokenType.IDENTIFIER,
+                        '#synthetic_identifier_${next.charOffset}',
+                        next.charOffset,
+                        0));
+              }
+            }
+          }
+          listener.handleInvalidTopLevelDeclaration(next);
+          return next;
+        }
+        // Fall through and continue parsing
+      } else if (!next.isIdentifier) {
+        // Recovery
+        if (next.isKeyword) {
+          reportRecoverableErrorWithToken(
+              next, fasta.templateExpectedIdentifier);
+          rewriter.insertTokenAfter(
+              next,
+              new SyntheticStringToken(
+                  TokenType.IDENTIFIER,
+                  '#synthetic_identifier_${next.charOffset}',
+                  next.charOffset,
+                  0));
+          token = next;
+          next = token.next;
+        } else if (token == beforeStart) {
+          // Ensure we make progress.
+          return reportInvalidTopLevelDeclaration(next);
+        } else {
+          // Looks like a declaration missing an identifier.
+          // Insert synthetic identifier and fall through.
+          rewriteAndRecover(
+              token,
+              fasta.templateExpectedIdentifier.withArguments(next),
+              new SyntheticStringToken(
+                  TokenType.IDENTIFIER,
+                  '#synthetic_identifier_${next.charOffset}',
+                  next.charOffset,
+                  0));
+          next = token.next;
+        }
+      }
+    }
+    // At this point, `token` is beforeName.
+
+    next = next.next;
+    value = next.stringValue;
+    if (identical(value, '<') && next.endGroup != null) {
+      next = next.endGroup.next;
+      value = next.stringValue;
+    }
+    if (getOrSet != null ||
+        identical(value, '(') ||
+        identical(value, '{') ||
+        identical(value, '<') ||
+        identical(value, '.') ||
+        identical(value, '=>')) {
+      if (varFinalOrConst != null) {
+        if (optional('var', varFinalOrConst)) {
+          reportRecoverableError(varFinalOrConst, fasta.messageVarReturnType);
+        } else {
+          reportRecoverableErrorWithToken(
+              varFinalOrConst, fasta.templateExtraneousModifier);
+        }
+      }
+      return parseTopLevelMethod(
+          beforeStart, externalToken, beforeType, getOrSet, token);
+    }
+
+    if (getOrSet != null) {
+      reportRecoverableErrorWithToken(
+          getOrSet, fasta.templateExtraneousModifier);
+    }
+    return parseFields(beforeStart, externalToken, null, null, varFinalOrConst,
+        beforeType, token, MemberKind.TopLevelField, typeContinuation);
   }
 
-  Token parseFields(Token start, Link<Token> modifiers, Token type,
-      Token beforeName, bool isTopLevel) {
-    // TODO(brianwilkerson): Remove the parameter `type` because it isn't used.
-    Token varFinalOrConst = null;
-    for (Token beforeModifier in modifiers) {
-      Token modifier = beforeModifier.next;
-      if (optional("var", modifier) ||
-          optional("final", modifier) ||
-          optional("const", modifier)) {
-        varFinalOrConst = modifier;
-        break;
+  Token parseFields(
+      Token beforeStart,
+      Token externalToken,
+      Token staticToken,
+      Token covariantToken,
+      Token varFinalOrConst,
+      Token beforeType,
+      Token beforeName,
+      MemberKind memberKind,
+      TypeContinuation typeContinuation) {
+    // TODO(danrubel): Consider passing modifiers via endTopLevelField
+    // rather than using handleModifier and handleModifiers.
+    int modifierCount = 0;
+    if (externalToken != null) {
+      reportRecoverableError(externalToken, fasta.messageExternalField);
+    }
+    if (staticToken != null) {
+      listener.handleModifier(staticToken);
+      ++modifierCount;
+    } else if (covariantToken != null) {
+      if (varFinalOrConst != null && optional('final', varFinalOrConst)) {
+        reportRecoverableError(covariantToken, fasta.messageFinalAndCovariant);
+        covariantToken = null;
+      } else {
+        listener.handleModifier(covariantToken);
+        ++modifierCount;
       }
     }
-    Token token = parseModifiers(start,
-            isTopLevel ? MemberKind.TopLevelField : MemberKind.NonStaticField,
-            isVarAllowed: true)
-        .next;
+    if (varFinalOrConst != null) {
+      listener.handleModifier(varFinalOrConst);
+      ++modifierCount;
+    }
+    listener.handleModifiers(modifierCount);
 
-    Token name = beforeName.next;
-    if (token != name) {
-      reportRecoverableErrorWithToken(token, fasta.templateExtraneousModifier);
-      token = name;
+    bool isTopLevel = memberKind == MemberKind.TopLevelField;
+
+    if (beforeType != null) {
+      parseType(beforeType, typeContinuation, null, memberKind);
+    } else if (varFinalOrConst != null) {
+      listener.handleNoType(beforeName);
+    } else {
+      // Recovery
+      reportRecoverableError(
+          beforeName.next, fasta.messageMissingConstFinalVarOrType);
+      listener.handleNoType(beforeName);
     }
 
     IdentifierContext context = isTopLevel
         ? IdentifierContext.topLevelVariableDeclaration
         : IdentifierContext.fieldDeclaration;
-    token = ensureIdentifier(beforeName.next, context);
+    Token name = ensureIdentifier(beforeName, context);
 
     int fieldCount = 1;
-    token = parseFieldInitializerOpt(token, name, varFinalOrConst, isTopLevel);
+    Token token =
+        parseFieldInitializerOpt(name, name, varFinalOrConst, isTopLevel);
     while (optional(',', token.next)) {
-      name = ensureIdentifier(token.next.next, context);
+      name = ensureIdentifier(token.next, context);
       token = parseFieldInitializerOpt(name, name, varFinalOrConst, isTopLevel);
       ++fieldCount;
     }
     token = ensureSemicolon(token);
     if (isTopLevel) {
-      listener.endTopLevelFields(fieldCount, start.next, token);
+      listener.endTopLevelFields(fieldCount, beforeStart.next, token);
     } else {
-      listener.endFields(fieldCount, start.next, token);
+      listener.endFields(fieldCount, beforeStart.next, token);
     }
     return token;
   }
 
-  Token parseTopLevelMethod(Token start, Token afterModifiers, Token beforeType,
-      Token getOrSet, Token beforeName) {
-    Token token = start = start.next;
-    Token name = beforeName.next;
+  Token parseTopLevelMethod(Token beforeStart, Token externalToken,
+      Token beforeType, Token getOrSet, Token beforeName) {
+    listener.beginTopLevelMethod(beforeStart);
 
-    // Parse modifiers
-    Token externalToken;
-    if (token == afterModifiers) {
-      listener.beginTopLevelMethod(start, name);
-      listener.handleModifiers(0);
-    } else if (optional('external', token) && token.next == afterModifiers) {
-      listener.beginTopLevelMethod(start, name);
-      externalToken = token;
-      parseModifier(externalToken);
+    // TODO(danrubel): Consider passing modifiers via endTopLevelMethod
+    // rather than handleModifier and handleModifiers
+    if (externalToken != null) {
+      listener.handleModifier(externalToken);
       listener.handleModifiers(1);
-      token = token.next;
     } else {
-      // If there are modifiers other than or in addition to `external`
-      // then we need to recover.
-      final context = new TopLevelMethodModifierContext(this, name);
-      // TODO(brianwilkerson): This use of `syntheticPreviousToken` should be
-      // removed when `parseTopLevelMethod` accepts the last consumed token.
-      token =
-          context.parseRecovery(syntheticPreviousToken(token), afterModifiers);
-      externalToken = context.externalToken;
-      name = context.name;
-      // TODO(brianwilkerson): Remove the invocation of `previous` when
-      // `context.name` returns the token before the name.
-      beforeName = name.previous;
-
-      // If the modifiers form a partial top level directive or declaration
-      // and we have found the start of a new top level declaration
-      // then return to parse that new declaration.
-      if (context.endInvalidTopLevelDeclarationToken != null) {
-        listener.handleInvalidTopLevelDeclaration(
-            context.endInvalidTopLevelDeclarationToken);
-        return token;
-      }
-
-      listener.beginTopLevelMethod(start, name);
-      if (externalToken == null) {
-        listener.handleModifiers(0);
-      } else {
-        parseModifier(externalToken);
-        listener.handleModifiers(1);
-      }
-      // Fall through to continue parsing the top level method.
+      listener.handleModifiers(0);
     }
 
     if (beforeType == null) {
-      listener.handleNoType(name);
+      listener.handleNoType(beforeName);
     } else {
       parseType(beforeType, TypeContinuation.Optional);
     }
-    name = ensureIdentifier(
-        beforeName.next, IdentifierContext.topLevelFunctionDeclaration);
+    Token name = ensureIdentifier(
+        beforeName, IdentifierContext.topLevelFunctionDeclaration);
 
+    Token token;
     bool isGetter = false;
     if (getOrSet == null) {
       token = parseTypeVariablesOpt(name);
@@ -2746,22 +3163,21 @@ class Parser {
       token = name;
       listener.handleNoTypeVariables(token.next);
     }
-    checkFormals(isGetter, name, token.next, MemberKind.TopLevelMethod);
+    checkFormals(name, isGetter, token.next, MemberKind.TopLevelMethod);
     token = parseFormalParametersOpt(token, MemberKind.TopLevelMethod);
     AsyncModifier savedAsyncModifier = asyncState;
     Token asyncToken = token.next;
-    token = parseAsyncModifier(token);
+    token = parseAsyncModifierOpt(token);
     if (getOrSet != null && !inPlainSync && optional("set", getOrSet)) {
       reportRecoverableError(asyncToken, fasta.messageSetterNotSync);
     }
     token = parseFunctionBody(token, false, externalToken != null);
     asyncState = savedAsyncModifier;
-    listener.endTopLevelMethod(start, getOrSet, token);
+    listener.endTopLevelMethod(beforeStart.next, getOrSet, token);
     return token;
   }
 
-  void checkFormals(bool isGetter, Token name, Token token, MemberKind kind) {
-    // TODO(brianwilkerson): Move `token` to be the first parameter?
+  void checkFormals(Token name, bool isGetter, Token token, MemberKind kind) {
     if (optional("(", token)) {
       if (isGetter) {
         reportRecoverableError(token, fasta.messageGetterWithFormals);
@@ -2804,10 +3220,6 @@ class Parser {
     // In addition, the loop below will include things that can't be
     // identifiers. This may be desirable (for error recovery), or
     // not. Regardless, this method probably needs an overhaul.
-
-    // TODO(brianwilkerson) Return the tokens before the tokens that are
-    // currently being returned so that they can be passed in where the last
-    // consumed token is required.
     Link<Token> identifiers = const Link<Token>();
 
     // `true` if 'get' has been seen.
@@ -2817,6 +3229,7 @@ class Parser {
 
     Token previous = token;
     token = token.next;
+
     while (token.kind != EOF_TOKEN) {
       if (optional('get', token)) {
         isGetter = true;
@@ -2839,11 +3252,13 @@ class Parser {
         return identifiers;
       } else if (optional("=", token) ||
           optional(";", token) ||
-          optional(",", token)) {
+          optional(",", token) ||
+          optional("}", token)) {
         // A field or abstract getter.
         identifiers = identifiers.prepend(previous);
         return identifiers;
-      } else if (optional('native', token) &&
+      } else if (hasName &&
+          optional('native', token) &&
           (token.next.kind == STRING_TOKEN || optional(';', token.next))) {
         // Skip.
         previous = token;
@@ -2856,16 +3271,11 @@ class Parser {
       } else if (isGetter) {
         hasName = true;
       }
-      token = listener.injectGenericCommentTypeAssign(token);
-      // TODO(brianwilkerson): Remove the invocation of `previous` when
-      // `injectGenericCommentTypeAssign` returns the last consumed token.
-      previous = token.previous;
       identifiers = identifiers.prepend(previous);
 
       if (!isGeneralizedFunctionType(token)) {
         // Read a potential return type.
         if (isValidTypeReference(token)) {
-          Token type = token;
           // type ...
           if (optional('.', token.next)) {
             // type '.' ...
@@ -2879,46 +3289,27 @@ class Parser {
             if (token.next is BeginToken) {
               previous = token;
               token = token.next;
-              Token closeBrace = closeBraceTokenFor(token);
-              if (closeBrace == null) {
+              Token beforeCloseBrace = beforeCloseBraceTokenFor(token);
+              if (beforeCloseBrace == null) {
                 previous = reportUnmatchedToken(token);
                 token = previous.next;
               } else {
-                token = closeBrace;
-                // TODO(brianwilkerson): Remove the invocation of `previous`
-                // when `closeBraceTokenFor` returns the token before the
-                // closing brace.
-                previous = token.previous;
+                previous = beforeCloseBrace;
+                token = beforeCloseBrace.next;
               }
-            }
-          }
-          // If the next token after a type has a type substitution comment
-          // /*=T*/, then the previous type tokens and the reference to them
-          // from the link should be replaced.
-          {
-            Token newType = listener.replaceTokenWithGenericCommentTypeAssign(
-                type, token.next);
-            if (!identical(newType, type)) {
-              identifiers = identifiers.tail;
-              token = newType;
-              // TODO(brianwilkerson): Remove the invocation of `previous` when
-              // `replaceTokenWithGenericCommentTypeAssign` returns the last
-              // consumed token.
-              previous = token.previous;
-              continue;
             }
           }
         } else if (token.type.isBuiltIn) {
           // Handle the edge case where a built-in keyword is being used
-          // as the identifier, as in "abstract<T>() => 0;"
+          // as the identifier, as in "abstract<T>() => 0;".
           if (optional('<', token.next)) {
             Token beforeIdentifier = previous;
             Token identifier = token;
             if (token.next is BeginToken) {
               previous = token;
               token = token.next;
-              Token closeBrace = closeBraceTokenFor(token);
-              if (closeBrace == null) {
+              Token beforeCloseBrace = beforeCloseBraceTokenFor(token);
+              if (beforeCloseBrace == null) {
                 // Handle the edge case where the user is defining the less
                 // than operator, as in "bool operator <(other) => false;"
                 if (optional('operator', identifier)) {
@@ -2929,11 +3320,8 @@ class Parser {
                   token = previous.next;
                 }
               } else {
-                token = closeBrace;
-                // TODO(brianwilkerson): Remove the invocation of `previous`
-                // when `closeBraceTokenFor` returns the token before the
-                // closing brace.
-                previous = token.previous;
+                previous = beforeCloseBrace;
+                token = beforeCloseBrace.next;
               }
             }
           }
@@ -2984,7 +3372,7 @@ class Parser {
     if (optional('=', next)) {
       Token assignment = next;
       listener.beginFieldInitializer(next);
-      token = parseExpression(next.next);
+      token = parseExpression(next);
       listener.endFieldInitializer(assignment, token.next);
     } else {
       if (varFinalOrConst != null) {
@@ -3009,7 +3397,7 @@ class Parser {
     if (optional('=', token.next)) {
       Token assignment = token.next;
       listener.beginVariableInitializer(assignment);
-      token = parseExpression(assignment.next);
+      token = parseExpression(assignment);
       listener.endVariableInitializer(assignment);
     } else {
       listener.handleNoVariableInitializer(token.next);
@@ -3064,10 +3452,29 @@ class Parser {
     if (optional('assert', next)) {
       token = parseAssert(token, Assert.Initializer);
     } else {
-      token = parseExpression(token.next);
+      token = parseExpression(token);
     }
     listener.endInitializer(token.next);
     return token;
+  }
+
+  /// If the next token is an opening curly brace, return it. Otherwise, use the
+  /// given [template] to report an error, insert an opening and a closing curly
+  /// brace, and return the newly inserted opening curly brace. If the
+  /// [template] is `null`, use a default error message instead.
+  Token ensureBlock(
+      Token token, Template<Message Function(Token token)> template) {
+    Token next = token.next;
+    if (optional('{', next)) return next;
+    Message message = template == null
+        ? fasta.templateExpectedButGot.withArguments('{')
+        : template.withArguments(token);
+    reportRecoverableError(next, message);
+    Token replacement = link(
+        new SyntheticBeginToken(TokenType.OPEN_CURLY_BRACKET, next.offset),
+        new SyntheticToken(TokenType.CLOSE_CURLY_BRACKET, next.offset));
+    rewriter.insertTokenAfter(token, replacement);
+    return replacement;
   }
 
   /// If the next token is a closing parenthesis, return it.
@@ -3092,14 +3499,32 @@ class Parser {
   /// If the next token is a colon, return it. Otherwise, report an
   /// error, insert a synthetic colon, and return the inserted colon.
   Token ensureColon(Token token) {
-    if (optional(':', token.next)) return token.next;
+    Token next = token.next;
+    if (optional(':', next)) return next;
     Message message = fasta.templateExpectedButGot.withArguments(':');
-    Token newToken = new SyntheticToken(TokenType.COLON, token.charOffset);
-    return rewriteAndRecover(token, message, newToken);
+    Token newToken = new SyntheticToken(TokenType.COLON, next.charOffset);
+    return rewriteAndRecover(token, message, newToken).next;
   }
 
-  Token ensureParseLiteralString(Token token) {
-    // TODO(brianwilkerson): Rename to `ensureLiteralString`?
+  /// If the token after [token] is a '>', return it.
+  /// If the next token is a composite greater-than token such as '>>',
+  /// then replace that token with separate tokens, and return the first '>'.
+  /// Otherwise, report an error, insert a synthetic '>',
+  /// and return that newly inserted synthetic '>'.
+  Token ensureGt(Token token) {
+    Token next = token.next;
+    String value = next.stringValue;
+    if (value == '>') {
+      return next;
+    }
+    rewriteGtCompositeOrRecover(token, next, value);
+    return token.next;
+  }
+
+  /// If the token after [token] is a not literal string,
+  /// then insert a synthetic literal string.
+  /// Call `parseLiteralString` and return the result.
+  Token ensureLiteralString(Token token) {
     Token next = token.next;
     if (!identical(next.kind, STRING_TOKEN)) {
       Message message = fasta.templateExpectedString.withArguments(next);
@@ -3110,8 +3535,9 @@ class Parser {
     return parseLiteralString(token);
   }
 
-  /// If the given [token] is a semi-colon, return it. Otherwise, report an
-  /// error, insert a synthetic semi-colon, and return the inserted semi-colon.
+  /// If the token after [token] is a semi-colon, return it.
+  /// Otherwise, report an error, insert a synthetic semi-colon,
+  /// and return the inserted semi-colon.
   Token ensureSemicolon(Token token) {
     // TODO(danrubel): Once all expect(';'...) call sites have been converted
     // to use this method, remove similar semicolon recovery code
@@ -3120,13 +3546,57 @@ class Parser {
     if (optional(';', next)) return next;
     Message message = fasta.templateExpectedButGot.withArguments(';');
     Token newToken = new SyntheticToken(TokenType.SEMICOLON, next.charOffset);
-    return rewriteAndRecover(token, message, newToken);
+    return rewriteAndRecover(token, message, newToken).next;
   }
 
+  /// Report an error at the token after [token] that has the given [message].
+  /// Insert the [newToken] after [token] and return [token].
   Token rewriteAndRecover(Token token, Message message, Token newToken) {
-    token = token.next;
-    reportRecoverableError(token, message);
-    return rewriter.insertToken(newToken, token);
+    reportRecoverableError(token.next, message);
+    rewriter.insertTokenAfter(token, newToken);
+    return token;
+  }
+
+  /// Replace the token after [token] with `[` followed by `]`
+  /// and return [token].
+  Token rewriteSquareBrackets(Token token) {
+    Token next = token.next;
+    assert(optional('[]', next));
+    Token replacement = link(
+        new BeginToken(TokenType.OPEN_SQUARE_BRACKET, next.offset),
+        new Token(TokenType.CLOSE_SQUARE_BRACKET, next.offset + 1));
+    rewriter.replaceTokenFollowing(token, replacement);
+    return token;
+  }
+
+  void rewriteGtCompositeOrRecover(Token token, Token next, String value) {
+    assert(value != '>');
+    Token replacement = new Token(TokenType.GT, next.charOffset);
+    if (identical(value, '>>')) {
+      replacement.next = new Token(TokenType.GT, next.charOffset + 1);
+    } else if (identical(value, '>=')) {
+      replacement.next = new Token(TokenType.EQ, next.charOffset + 1);
+    } else if (identical(value, '>>=')) {
+      replacement.next = new Token(TokenType.GT, next.charOffset + 1);
+      replacement.next.next = new Token(TokenType.EQ, next.charOffset + 2);
+    } else {
+      // Recovery
+      rewriteAndRecover(token, fasta.templateExpectedToken.withArguments('>'),
+          new SyntheticToken(TokenType.GT, next.offset));
+      return;
+    }
+    rewriter.replaceTokenFollowing(token, replacement);
+  }
+
+  void rewriteLtEndGroupOpt(BeginToken beginToken) {
+    assert(optional('<', beginToken));
+    Token end = beginToken.endGroup;
+    String value = end?.stringValue;
+    if (value != null && value.length > 1) {
+      Token beforeEnd = previousToken(beginToken, end);
+      rewriteGtCompositeOrRecover(beforeEnd, end, value);
+      beginToken.endGroup = null;
+    }
   }
 
   /// Report the given token as unexpected and return the next token if the next
@@ -3143,23 +3613,6 @@ class Parser {
       }
     }
     return token;
-  }
-
-  Token parseLiteralStringOrRecoverExpression(Token token) {
-    // TODO(brianwilkerson) Replace invocations of this method with invocations
-    // of `ensureParseLiteralString`.
-    Token next = token.next;
-    if (identical(next.kind, STRING_TOKEN)) {
-      return parseLiteralString(token);
-    } else if (next is ErrorToken) {
-      // TODO(brianwilkerson): Remove the invocation of `previous` when
-      // `reportErrorToken` returns the last consumed token.
-      return reportErrorToken(next, false).previous;
-    } else {
-      reportRecoverableErrorWithToken(next, fasta.templateExpectedString);
-      return parseRecoverExpression(
-          token, fasta.templateExpectedString.withArguments(next));
-    }
   }
 
   Token expectSemicolon(Token token) {
@@ -3191,48 +3644,9 @@ class Parser {
   }
 
   Token parseModifier(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
+    token = token.next;
     assert(token.isModifier);
     listener.handleModifier(token);
-    return token;
-  }
-
-  /// This method is used in most locations where modifiers can occur. However,
-  /// it isn't used when parsing a class or when parsing the modifiers of a
-  /// member function (non-local), but is used when parsing their formal
-  /// parameters.
-  ///
-  /// When parsing the formal parameters of any function, [parameterKind] is
-  /// non-null.
-  Token parseModifiers(Token token, MemberKind memberKind,
-      {FormalParameterKind parameterKind, bool isVarAllowed: false}) {
-    ModifierContext context = new ModifierContext(
-        this,
-        memberKind,
-        parameterKind,
-        isVarAllowed,
-        typeContiunationFromFormalParameterKind(parameterKind));
-
-    Token previous = token;
-    token = context.parseOpt(token);
-
-    // If the next token is a modifier,
-    // then it's probably out of order and we need to recover from that.
-    if (isModifier(token.next)) {
-      // Recovery
-      context = new ModifierRecoveryContext(this, memberKind, parameterKind,
-          isVarAllowed, typeContiunationFromFormalParameterKind(parameterKind));
-      token = context.parseOpt(previous);
-    }
-    listener.handleModifiers(context.modifierCount);
-
-    memberKind = context.memberKind;
-    context.typeContinuation ??=
-        (isVarAllowed || memberKind == MemberKind.GeneralizedFunctionType)
-            ? TypeContinuation.Required
-            : TypeContinuation.Optional;
-
-    token = parseType(token, context.typeContinuation, null, memberKind);
     return token;
   }
 
@@ -3251,9 +3665,10 @@ class Parser {
   }
 
   Token skipClassBody(Token token) {
+    Token previousToken = token;
     token = token.next;
     if (!optional('{', token)) {
-      token = recoverFromMissingClassBody(token);
+      token = ensureBlock(previousToken, fasta.templateExpectedClassBody);
     }
     Token closeBrace = closeBraceTokenFor(token);
     if (closeBrace == null ||
@@ -3268,24 +3683,17 @@ class Parser {
   ///   '{' classMember* '}'
   /// ;
   /// ```
-  ///
-  /// The [beforeBody] token is required to be a token that appears somewhere
-  /// before the [token] in the token stream.
-  Token parseClassBody(Token token, Token beforeBody) {
-    // TODO(brianwilkerson): Remove the parameter `beforeBody` because it is not
-    // being used.
+  Token parseClassBody(Token token) {
     Token begin = token = token.next;
+    assert(optional('{', token));
     listener.beginClassBody(token);
-    if (!optional('{', token)) {
-      token = begin = recoverFromMissingClassBody(token);
-    }
     int count = 0;
     while (notEofOrValue('}', token.next)) {
       token = parseClassMember(token);
       ++count;
     }
     token = token.next;
-    expect('}', token);
+    assert(optional('}', token));
     listener.endClassBody(count, begin, token);
     return token;
   }
@@ -3293,13 +3701,6 @@ class Parser {
   bool isGetOrSet(Token token) {
     final String value = token.stringValue;
     return (identical(value, 'get')) || (identical(value, 'set'));
-  }
-
-  bool isFactoryDeclaration(Token token) {
-    while (isModifier(token)) {
-      token = token.next;
-    }
-    return optional('factory', token);
   }
 
   bool isModifierOrFactory(Token next) =>
@@ -3323,30 +3724,86 @@ class Parser {
   /// ;
   /// ```
   Token parseClassMember(Token token) {
-    Token start = parseMetadataStar(token);
-    token = start.next;
-    listener.beginMember(token);
-    // TODO(danrubel): isFactoryDeclaration scans forward over modifiers
-    // which findMemberName does as well. See if this can be done once
-    // instead of twice.
-    if (isFactoryDeclaration(token)) {
-      token = parseFactoryMethod(start);
+    Token beforeStart = token = parseMetadataStar(token);
+
+    TypeContinuation typeContinuation;
+    Token covariantToken;
+    Token externalToken;
+    Token staticToken;
+    Token varFinalOrConst;
+
+    Token next = token.next;
+    if (isModifier(next)) {
+      if (optional('external', next)) {
+        externalToken = token = next;
+        next = token.next;
+      }
+      if (isModifier(next)) {
+        if (optional('static', next)) {
+          staticToken = token = next;
+          next = token.next;
+        } else if (optional('covariant', next)) {
+          covariantToken = token = next;
+          next = token.next;
+        }
+        if (isModifier(next)) {
+          if (optional('final', next)) {
+            typeContinuation = TypeContinuation.Optional;
+            varFinalOrConst = token = next;
+            next = token.next;
+          } else if (optional('var', next)) {
+            typeContinuation = TypeContinuation.OptionalAfterVar;
+            varFinalOrConst = token = next;
+            next = token.next;
+          } else if (optional('const', next) && covariantToken == null) {
+            typeContinuation = TypeContinuation.Optional;
+            varFinalOrConst = token = next;
+            next = token.next;
+          }
+          if (isModifier(next)) {
+            ModifierRecoveryContext2 context =
+                new ModifierRecoveryContext2(this);
+            token = context.parseClassMemberModifiers(token, typeContinuation,
+                externalToken: externalToken,
+                staticToken: staticToken,
+                covariantToken: covariantToken,
+                varFinalOrConst: varFinalOrConst);
+            next = token.next;
+
+            covariantToken = context.covariantToken;
+            externalToken = context.externalToken;
+            staticToken = context.staticToken;
+            varFinalOrConst = context.varFinalOrConst;
+
+            typeContinuation = context.typeContinuation;
+            context = null;
+          }
+        }
+      }
+    }
+    typeContinuation ??= TypeContinuation.Required;
+
+    listener.beginMember();
+
+    if (optional('factory', next)) {
+      token = parseFactoryMethod(token, beforeStart, externalToken,
+          staticToken ?? covariantToken, varFinalOrConst);
       listener.endMember();
       assert(token.next != null);
       return token;
     }
 
-    Link<Token> identifiers = findMemberName(start);
+    Link<Token> identifiers = findMemberName(token);
     if (identifiers.isEmpty) {
-      return reportUnrecoverableErrorWithToken(
-          token, fasta.templateExpectedDeclaration);
+      return recoverFromInvalidClassMember(token, beforeStart, externalToken,
+          staticToken, covariantToken, varFinalOrConst, typeContinuation);
     }
     Token afterName = identifiers.head.next;
     identifiers = identifiers.tail;
 
     if (identifiers.isEmpty) {
-      return reportUnrecoverableErrorWithToken(
-          token, fasta.templateExpectedDeclaration);
+      return recoverFromInvalidClassMember(token, beforeStart, externalToken,
+          staticToken, covariantToken, varFinalOrConst, typeContinuation);
     }
     Token beforeName = identifiers.head;
     identifiers = identifiers.tail;
@@ -3365,9 +3822,37 @@ class Parser {
     }
     Token beforeType;
     if (!identifiers.isEmpty) {
-      if (isValidTypeReference(identifiers.head.next)) {
+      Token maybeType = identifiers.head.next;
+      if (isValidTypeReference(maybeType)) {
         beforeType = identifiers.head;
         identifiers = identifiers.tail;
+      } else if (maybeType.type.isBuiltIn && optional('<', maybeType.next)) {
+        // Recovery
+        // It is an error when built-in keyword is being used
+        // as a type, as in `abstract<t> foo`.
+        // This error is reported by parseFields and parseMethod
+        // via ensureIdentifier.
+        beforeType = identifiers.head;
+        identifiers = identifiers.tail;
+      }
+    }
+
+    // Recovery: Anything left in the identifiers list is unexpected.
+    if (identifiers.isNotEmpty) {
+      identifiers = identifiers.reverse();
+      while (identifiers.isNotEmpty) {
+        token = identifiers.head.next;
+        identifiers = identifiers.tail;
+        String value = token.stringValue;
+        if (identical(value, 'class')) {
+          return reportAndSkipClassInClass(token);
+        } else if (identical(value, 'enum')) {
+          return reportAndSkipEnumInClass(token);
+        } else if (identical(value, 'typedef')) {
+          return reportAndSkipTypedefInClass(token);
+        } else {
+          reportRecoverableErrorWithToken(token, fasta.templateUnexpectedToken);
+        }
       }
     }
 
@@ -3394,14 +3879,16 @@ class Parser {
           isField = true;
         }
         break;
-      } else if ((identical(value, '=')) || (identical(value, ','))) {
+      } else if (identical(value, '=') ||
+          identical(value, ',') ||
+          identical(value, '}')) {
         isField = true;
         break;
       } else {
         token = reportUnexpectedToken(token);
         if (identical(token.next.kind, EOF_TOKEN)) {
           // TODO(ahe): This is a hack, see parseTopLevelMember.
-          listener.endFields(1, start.next, token.next);
+          listener.endFields(1, beforeStart.next, token.next);
           listener.endMember();
           return token;
         }
@@ -3409,103 +3896,101 @@ class Parser {
       }
     }
 
-    Token afterModifiers =
-        identifiers.isNotEmpty ? identifiers.head.next.next : start.next;
-    token = isField
-        ? parseFields(
-            start, identifiers.reverse(), beforeType?.next, beforeName, false)
-        : parseMethod(start, afterModifiers, beforeType, getOrSet, beforeName);
+    if (isField) {
+      if (getOrSet != null) {
+        reportRecoverableErrorWithToken(
+            getOrSet, fasta.templateExtraneousModifier);
+      }
+      token = parseFields(
+          beforeStart,
+          externalToken,
+          staticToken,
+          covariantToken,
+          varFinalOrConst,
+          beforeType,
+          beforeName,
+          staticToken != null
+              ? MemberKind.StaticField
+              : MemberKind.NonStaticField,
+          typeContinuation);
+    } else {
+      token = parseMethod(beforeStart, externalToken, staticToken,
+          covariantToken, varFinalOrConst, beforeType, getOrSet, beforeName);
+    }
     listener.endMember();
     return token;
   }
 
-  Token parseMethod(Token token, Token afterModifiers, Token beforeType,
-      Token getOrSet, Token beforeName) {
-    Token start = token = token.next;
-    Token name = beforeName.next;
+  Token parseMethod(
+      Token beforeStart,
+      Token externalToken,
+      Token staticToken,
+      Token covariantToken,
+      Token varFinalOrConst,
+      Token beforeType,
+      Token getOrSet,
+      Token beforeName) {
+    bool isOperator = getOrSet == null && optional('operator', beforeName.next);
 
-    Token externalModifier;
-    Token staticModifier;
-    if (token != afterModifiers) {
-      int modifierCount = 0;
-      if (optional('external', token)) {
-        externalModifier = token;
-        parseModifier(externalModifier);
-        ++modifierCount;
-        token = token.next;
-      }
-      if (token != afterModifiers) {
-        if (optional('static', token)) {
-          staticModifier = token;
-          parseModifier(staticModifier);
-          ++modifierCount;
-          token = token.next;
-        }
-        if (token != afterModifiers) {
-          if (getOrSet == null) {
-            if (optional("const", token)) {
-              if (token.next == afterModifiers) {
-                parseModifier(token);
-                ++modifierCount;
-                token = token.next;
-              }
-            }
-          } else if (optional('set', getOrSet)) {
-            if (staticModifier == null && optional('covariant', token)) {
-              if (token.next == afterModifiers) {
-                parseModifier(token);
-                ++modifierCount;
-                token = token.next;
-              }
-            }
-          }
-          // If the next token is a modifier,
-          // then it's probably out of order and we need to recover from that.
-          if (token != afterModifiers) {
-            final context = new ClassMethodModifierContext(this);
-            token = context.parseRecovery(token, externalModifier,
-                staticModifier, getOrSet, afterModifiers);
-
-            // If the modifiers form a partial top level directive
-            // or declaration and we have found the start of a new top level
-            // declaration then return to parse that new declaration.
-            if (context.endInvalidMemberToken != null) {
-              listener.handleInvalidMember(context.endInvalidMemberToken);
-              return context.endInvalidMemberToken;
-            }
-
-            externalModifier = context.externalToken;
-            staticModifier = context.staticToken;
-            modifierCount = context.modifierCount;
-          }
-        }
-      }
-      listener.beginMethod(start, name);
-      listener.handleModifiers(modifierCount);
-    } else {
-      listener.beginMethod(start, name);
-      listener.handleModifiers(0);
+    int modifierCount = 0;
+    if (externalToken != null) {
+      listener.handleModifier(externalToken);
+      ++modifierCount;
     }
+    if (staticToken != null) {
+      if (!isOperator) {
+        listener.handleModifier(staticToken);
+        ++modifierCount;
+      } else {
+        reportRecoverableError(staticToken, fasta.messageStaticOperator);
+        staticToken = null;
+      }
+    } else if (covariantToken != null) {
+      if (getOrSet != null && !optional('get', getOrSet)) {
+        listener.handleModifier(covariantToken);
+        ++modifierCount;
+      } else {
+        reportRecoverableError(covariantToken, fasta.messageCovariantMember);
+        covariantToken = null;
+      }
+    }
+    if (varFinalOrConst != null) {
+      if (optional('const', varFinalOrConst)) {
+        if (getOrSet == null) {
+          listener.handleModifier(varFinalOrConst);
+          ++modifierCount;
+        } else {
+          reportRecoverableErrorWithToken(
+              varFinalOrConst, fasta.templateExtraneousModifier);
+          varFinalOrConst = null;
+        }
+      } else if (optional('var', varFinalOrConst)) {
+        reportRecoverableError(varFinalOrConst, fasta.messageVarReturnType);
+      } else {
+        assert(optional('final', varFinalOrConst));
+        reportRecoverableErrorWithToken(
+            varFinalOrConst, fasta.templateExtraneousModifier);
+      }
+    }
+    // TODO(danrubel): Move beginMethod event before handleModifier events
+    listener.beginMethod();
+    listener.handleModifiers(modifierCount);
 
     if (beforeType == null) {
-      listener.handleNoType(name);
+      listener.handleNoType(beforeName);
     } else {
       parseType(beforeType, TypeContinuation.Optional);
     }
-    if (getOrSet == null && optional('operator', name)) {
-      token = parseOperatorName(beforeName.next);
-      if (staticModifier != null) {
-        reportRecoverableError(staticModifier, fasta.messageStaticOperator);
-      }
+
+    Token token;
+    if (isOperator) {
+      token = parseOperatorName(beforeName);
     } else {
-      token = ensureIdentifier(
-          beforeName.next, IdentifierContext.methodDeclaration);
+      token = ensureIdentifier(beforeName, IdentifierContext.methodDeclaration);
+      token = parseQualifiedRestOpt(
+          token, IdentifierContext.methodDeclarationContinuation);
     }
 
-    // TODO(brianwilkerson): Move the next statement inside the else above
-    // because operator names can't be qualified.
-    token = parseQualifiedRestOpt(
-        token, IdentifierContext.methodDeclarationContinuation);
     bool isGetter = false;
     if (getOrSet == null) {
       token = parseTypeVariablesOpt(token);
@@ -3513,90 +3998,83 @@ class Parser {
       isGetter = optional("get", getOrSet);
       listener.handleNoTypeVariables(token.next);
     }
-    MemberKind kind = staticModifier != null
+
+    MemberKind kind = staticToken != null
         ? MemberKind.StaticMethod
         : MemberKind.NonStaticMethod;
-    checkFormals(isGetter, name, token.next, kind);
+    checkFormals(beforeName.next, isGetter, token.next, kind);
     token = parseFormalParametersOpt(token, kind);
     token = parseInitializersOpt(token);
 
-    bool allowAbstract = staticModifier == null;
     AsyncModifier savedAsyncModifier = asyncState;
     Token asyncToken = token.next;
-    token = parseAsyncModifier(token);
+    token = parseAsyncModifierOpt(token);
     if (getOrSet != null && !inPlainSync && optional("set", getOrSet)) {
       reportRecoverableError(asyncToken, fasta.messageSetterNotSync);
     }
     Token next = token.next;
-    if (externalModifier != null) {
+    if (externalToken != null) {
       if (!optional(';', next)) {
         reportRecoverableError(next, fasta.messageExternalMethodWithBody);
       }
-      allowAbstract = true;
     }
     if (optional('=', next)) {
+      reportRecoverableError(next, fasta.messageRedirectionInNonFactory);
       token = parseRedirectingFactoryBody(token);
     } else {
-      token = parseFunctionBody(token, false, allowAbstract);
+      token = parseFunctionBody(
+          token, false, staticToken == null || externalToken != null);
     }
     asyncState = savedAsyncModifier;
-    listener.endMethod(getOrSet, start, token);
+    listener.endMethod(getOrSet, beforeStart.next, token);
     return token;
   }
 
-  Token parseFactoryMethod(Token token) {
-    Token next = token.next;
-    Token start = next;
-    assert(isFactoryDeclaration(start));
-    Token constToken;
-    Token externalToken;
-    Token factoryKeyword;
+  Token parseFactoryMethod(Token token, Token beforeStart, Token externalToken,
+      Token staticOrCovariant, Token varFinalOrConst) {
+    Token factoryKeyword = token = token.next;
+    assert(optional('factory', factoryKeyword));
 
-    if (optional('factory', next) && !isModifierOrFactory(next.next)) {
-      listener.handleModifiers(0);
-      factoryKeyword = next;
-      token = next;
-      next = token.next;
-    } else {
-      int modifierCount = 0;
-      if (optional('external', next)) {
-        externalToken = next;
-        parseModifier(next);
-        ++modifierCount;
-        token = next;
-        next = token.next;
-      }
-      if (optional('const', next)) {
-        constToken = next;
-        parseModifier(next);
-        ++modifierCount;
-        token = next;
-        next = token.next;
-      }
-      if (optional('factory', next) && !isModifierOrFactory(next.next)) {
-        factoryKeyword = next;
-        token = next;
-        next = token.next;
-      } else {
-        // Recovery
-        FactoryModifierContext context = new FactoryModifierContext(
-            this, modifierCount, externalToken, constToken);
-        token = context.parseRecovery(token);
-        next = token.next;
-        externalToken = context.externalToken;
-        constToken = context.constToken;
-        factoryKeyword = context.factoryKeyword;
-        modifierCount = context.modifierCount;
-      }
-      listener.handleModifiers(modifierCount);
+    if (!isValidTypeReference(token.next)) {
+      // Recovery
+      ModifierRecoveryContext2 context = new ModifierRecoveryContext2(this);
+      token = context.parseModifiersAfterFactory(token,
+          externalToken: externalToken,
+          staticOrCovariant: staticOrCovariant,
+          varFinalOrConst: varFinalOrConst);
+
+      externalToken = context.externalToken;
+      staticOrCovariant = context.staticToken ?? context.covariantToken;
+      varFinalOrConst = context.varFinalOrConst;
     }
 
-    listener.beginFactoryMethod(factoryKeyword);
+    int modifierCount = 0;
+    if (externalToken != null) {
+      listener.handleModifier(externalToken);
+      ++modifierCount;
+    }
+    if (staticOrCovariant != null) {
+      reportRecoverableErrorWithToken(
+          staticOrCovariant, fasta.templateExtraneousModifier);
+    }
+    if (varFinalOrConst != null) {
+      if (optional('const', varFinalOrConst)) {
+        listener.handleModifier(varFinalOrConst);
+        ++modifierCount;
+      } else {
+        reportRecoverableErrorWithToken(
+            varFinalOrConst, fasta.templateExtraneousModifier);
+        varFinalOrConst = null;
+      }
+    }
+    listener.handleModifiers(modifierCount);
+
+    listener.beginFactoryMethod(beforeStart);
     token = parseConstructorReference(token);
     token = parseFormalParametersRequiredOpt(token, MemberKind.Factory);
     Token asyncToken = token.next;
-    token = parseAsyncModifier(token);
-    next = token.next;
+    token = parseAsyncModifierOpt(token);
+    Token next = token.next;
     if (!inPlainSync) {
       reportRecoverableError(asyncToken, fasta.messageFactoryNotSync);
     }
@@ -3611,26 +4089,27 @@ class Parser {
       }
       token = parseFunctionBody(token, false, true);
     } else {
-      if (constToken != null && !optional('native', next)) {
+      if (varFinalOrConst != null && !optional('native', next)) {
         // TODO(danrubel): report error to fix
         // test_constFactory in parser_fasta_test.dart
         //reportRecoverableError(constToken, fasta.messageConstFactory);
       }
       token = parseFunctionBody(token, false, false);
     }
-    listener.endFactoryMethod(start, factoryKeyword, token);
+    listener.endFactoryMethod(beforeStart.next, factoryKeyword, token);
     return token;
   }
 
   Token parseOperatorName(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
+    Token beforeToken = token;
+    token = token.next;
     assert(optional('operator', token));
     Token next = token.next;
     if (next.isUserDefinableOperator) {
       listener.handleOperatorName(token, next);
       return next;
     } else if (optional('(', next)) {
-      return ensureIdentifier(token, IdentifierContext.operatorName);
+      return ensureIdentifier(beforeToken, IdentifierContext.operatorName);
     } else {
       // Recovery
       // The user has specified an invalid operator name.
@@ -3668,16 +4147,15 @@ class Parser {
   /// - Modifiers.
   /// - Return type.
   Token parseNamedFunctionRest(
-      Token begin, Token name, Token formals, bool isFunctionExpression) {
-    // TODO(brianwilkerson): Move `name` to be the first parameter (and consider
-    // renaming it to `token`).
-    // TODO(brianwilkerson) Accept the last consumed token.
-    Token token = name;
+      Token beforeName, Token begin, Token formals, bool isFunctionExpression) {
+    Token token = beforeName.next;
     listener.beginFunctionName(token);
-    token = ensureIdentifier(token, IdentifierContext.localFunctionDeclaration)
-        .next;
+    token =
+        ensureIdentifier(beforeName, IdentifierContext.localFunctionDeclaration)
+            .next;
     if (isFunctionExpression) {
-      reportRecoverableError(name, fasta.messageNamedFunctionExpression);
+      reportRecoverableError(
+          beforeName.next, fasta.messageNamedFunctionExpression);
     }
     listener.endFunctionName(begin, token);
     token = parseFormalParametersOpt(formals, MemberKind.Local);
@@ -3692,7 +4170,7 @@ class Parser {
   }
 
   /// Parses a function body optionally preceded by an async modifier (see
-  /// [parseAsyncModifier]).  This method is used in both expression context
+  /// [parseAsyncModifierOpt]).  This method is used in both expression context
   /// (when [ofFunctionExpression] is true) and statement context. In statement
   /// context (when [ofFunctionExpression] is false), and if the function body
   /// is on the form `=> expression`, a trailing semicolon is required.
@@ -3701,7 +4179,7 @@ class Parser {
   Token parseAsyncOptBody(
       Token token, bool ofFunctionExpression, bool allowAbstract) {
     AsyncModifier savedAsyncModifier = asyncState;
-    token = parseAsyncModifier(token);
+    token = parseAsyncModifierOpt(token);
     token = parseFunctionBody(token, ofFunctionExpression, allowAbstract);
     asyncState = savedAsyncModifier;
     return token;
@@ -3709,7 +4187,7 @@ class Parser {
 
   Token parseConstructorReference(Token token) {
     Token start =
-        ensureIdentifier(token.next, IdentifierContext.constructorReference);
+        ensureIdentifier(token, IdentifierContext.constructorReference);
     listener.beginConstructorReference(start);
     token = parseQualifiedRestOpt(
         start, IdentifierContext.constructorReferenceContinuation);
@@ -3717,7 +4195,7 @@ class Parser {
     Token period = null;
     if (optional('.', token.next)) {
       period = token.next;
-      token = ensureIdentifier(period.next,
+      token = ensureIdentifier(period,
           IdentifierContext.constructorReferenceContinuationAfterTypeArguments);
     } else {
       listener.handleNoConstructorReferenceContinuationAfterTypeArguments(
@@ -3739,7 +4217,6 @@ class Parser {
   }
 
   Token skipFunctionBody(Token token, bool isExpression, bool allowAbstract) {
-    // TODO(brianwilkerson) Return the last consumed token.
     assert(!isExpression);
     token = skipAsyncModifier(token);
     Token next = token.next;
@@ -3757,29 +4234,36 @@ class Parser {
       listener.handleNativeFunctionBodyIgnored(nativeToken, next);
       // Fall through to recover and skip function body
     }
-    token = next;
-    String value = token.stringValue;
+    String value = next.stringValue;
     if (identical(value, ';')) {
+      token = next;
       if (!allowAbstract) {
         reportRecoverableError(token, fasta.messageExpectedBody);
       }
       listener.handleNoFunctionBody(token);
-    } else {
-      if (identical(value, '=>')) {
-        token = parseExpression(token.next);
-        expectSemicolon(token.next);
+    } else if (identical(value, '=>')) {
+      token = parseExpression(next);
+      // There ought to be a semicolon following the expression, but we check
+      // before advancing in order to be consistent with the way the method
+      // [parseFunctionBody] recovers when the semicolon is missing.
+      if (optional(';', token.next)) {
         token = token.next;
-        listener.handleFunctionBodySkipped(token, true);
-      } else if (identical(value, '=')) {
-        reportRecoverableError(token, fasta.messageExpectedBody);
-        token = parseExpression(token.next);
-        expectSemicolon(token.next);
-        token = token.next;
-        listener.handleFunctionBodySkipped(token, true);
-      } else {
-        token = skipBlock(token);
-        listener.handleFunctionBodySkipped(token, false);
       }
+      listener.handleFunctionBodySkipped(token, true);
+    } else if (identical(value, '=')) {
+      token = next;
+      reportRecoverableError(token, fasta.messageExpectedBody);
+      token = parseExpression(token);
+      // There ought to be a semicolon following the expression, but we check
+      // before advancing in order to be consistent with the way the method
+      // [parseFunctionBody] recovers when the semicolon is missing.
+      if (optional(';', token.next)) {
+        token = token.next;
+      }
+      listener.handleFunctionBodySkipped(token, true);
+    } else {
+      token = skipBlock(token);
+      listener.handleFunctionBodySkipped(token, false);
     }
     return token;
   }
@@ -3812,24 +4296,12 @@ class Parser {
       listener.handleEmptyFunctionBody(next);
       return next;
     } else if (optional('=>', next)) {
-      Token begin = next;
-      token = parseExpression(next.next);
-      if (!ofFunctionExpression) {
-        token = ensureSemicolon(token);
-        listener.handleExpressionFunctionBody(begin, token);
-      } else {
-        listener.handleExpressionFunctionBody(begin, null);
-      }
-      if (inGenerator) {
-        listener.handleInvalidStatement(
-            begin, fasta.messageGeneratorReturnsValue);
-      }
-      return token;
+      return parseExpressionFunctionBody(next, ofFunctionExpression);
     } else if (optional('=', next)) {
       Token begin = next;
       // Recover from a bad factory method.
       reportRecoverableError(next, fasta.messageExpectedBody);
-      token = parseExpression(next.next);
+      token = parseExpression(next);
       if (!ofFunctionExpression) {
         token = ensureSemicolon(token);
         listener.handleExpressionFunctionBody(begin, token);
@@ -3841,16 +4313,31 @@ class Parser {
     Token begin = next;
     int statementCount = 0;
     if (!optional('{', next)) {
-      token = recoverFromMissingFunctionBody(next);
-      listener.handleInvalidFunctionBody(token.next);
-      return token;
+      // Recovery
+      // If there is a stray simple identifier in the function expression
+      // because the user is typing (e.g. `() asy => null;`)
+      // then report an error, skip the token, and continue parsing.
+      if (next.isKeywordOrIdentifier && optional('=>', next.next)) {
+        reportRecoverableErrorWithToken(next, fasta.templateUnexpectedToken);
+        return parseExpressionFunctionBody(next.next, ofFunctionExpression);
+      }
+      if (next.isKeywordOrIdentifier && optional('{', next.next)) {
+        reportRecoverableErrorWithToken(next, fasta.templateUnexpectedToken);
+        token = next;
+        begin = next = token.next;
+        // Fall through to parse the block.
+      } else {
+        token = ensureBlock(token, fasta.templateExpectedFunctionBody);
+        listener.handleInvalidFunctionBody(token);
+        return token.endGroup;
+      }
     }
 
     listener.beginBlockFunctionBody(begin);
     token = next;
     while (notEofOrValue('}', token.next)) {
       Token startToken = token.next;
-      token = parseStatementOpt(token);
+      token = parseStatement(token);
       if (identical(token.next, startToken)) {
         // No progress was made, so we report the current token as being invalid
         // and move forward.
@@ -3863,6 +4350,23 @@ class Parser {
     token = token.next;
     listener.endBlockFunctionBody(statementCount, begin, token);
     expect('}', token);
+    return token;
+  }
+
+  Token parseExpressionFunctionBody(Token token, bool ofFunctionExpression) {
+    assert(optional('=>', token));
+    Token begin = token;
+    token = parseExpression(token);
+    if (!ofFunctionExpression) {
+      token = ensureSemicolon(token);
+      listener.handleExpressionFunctionBody(begin, token);
+    } else {
+      listener.handleExpressionFunctionBody(begin, null);
+    }
+    if (inGenerator) {
+      listener.handleInvalidStatement(
+          begin, fasta.messageGeneratorReturnsValue);
+    }
     return token;
   }
 
@@ -3886,8 +4390,7 @@ class Parser {
     return token;
   }
 
-  Token parseAsyncModifier(Token token) {
-    // TODO(brianwilkerson): Rename to `parseAsyncModifierOpt`?
+  Token parseAsyncModifierOpt(Token token) {
     Token async;
     Token star;
     asyncState = AsyncModifier.Sync;
@@ -3921,13 +4424,12 @@ class Parser {
   }
 
   int statementDepth = 0;
-  Token parseStatementOpt(Token token) {
-    // TODO(brianwilkerson): Rename this to `parseStatement`?
+  Token parseStatement(Token token) {
     if (statementDepth++ > 500) {
       // This happens for degenerate programs, for example, a lot of nested
       // if-statements. The language test deep_nesting2_negative_test, for
       // example, provokes this.
-      return reportUnrecoverableError(token.next, fasta.messageStackOverflow);
+      return recoverFromStackOverflow(token.next);
     }
     Token result = parseStatementX(token);
     statementDepth--;
@@ -3989,12 +4491,14 @@ class Parser {
       throw "Internal error: Unknown asyncState: '$asyncState'.";
     } else if (identical(value, 'const')) {
       return parseExpressionStatementOrConstDeclaration(token);
+    } else if (isModifier(token.next)) {
+      return parseVariablesDeclaration(token);
     } else if (token.next.isIdentifier) {
       return parseExpressionStatementOrDeclaration(token);
     } else if (identical(value, '@')) {
       return parseVariablesDeclaration(token);
     } else {
-      return parseExpressionStatement(token.next);
+      return parseExpressionStatement(token);
     }
   }
 
@@ -4011,7 +4515,7 @@ class Parser {
     if (optional('*', token.next)) {
       starToken = token = token.next;
     }
-    token = parseExpression(token.next);
+    token = parseExpression(token);
     token = ensureSemicolon(token);
     listener.endYieldStatement(begin, starToken, token);
     return token;
@@ -4031,7 +4535,7 @@ class Parser {
       listener.endReturnStatement(false, begin, next);
       return next;
     }
-    token = parseExpression(token.next);
+    token = parseExpression(token);
     token = ensureSemicolon(token);
     listener.endReturnStatement(true, begin, token);
     if (inGenerator) {
@@ -4062,11 +4566,10 @@ class Parser {
   /// ;
   /// ```
   Token parseLabel(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
     // TODO(brianwilkerson): Enable this assert.
     // `parseType` is allowing `void` to be a label.
-//    assert(token.isIdentifier);
-    assert(optional(':', token.next));
+//    assert(token.next.isIdentifier);
+    assert(optional(':', token.next.next));
     token = ensureIdentifier(token, IdentifierContext.labelDeclaration).next;
     expect(':', token);
     listener.handleLabel(token);
@@ -4079,20 +4582,19 @@ class Parser {
   /// ;
   /// ```
   Token parseLabeledStatement(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
+    Token next = token.next;
     // TODO(brianwilkerson): Enable this assert.
     // `parseType` is allowing `void` to be a label.
-//    assert(token.isIdentifier);
-    assert(optional(':', token.next));
+//    assert(next.isIdentifier);
+    assert(optional(':', next.next));
     int labelCount = 0;
     do {
-      token = parseLabel(token).next;
+      token = parseLabel(token);
+      next = token.next;
       labelCount++;
-    } while (token.isIdentifier && optional(':', token.next));
-    listener.beginLabeledStatement(token, labelCount);
-    // TODO(brianwilkerson): Remove the invocation of `previous` when this
-    // method accepts the last consumed token.
-    token = parseStatementOpt(token.previous);
+    } while (next.isIdentifier && optional(':', next.next));
+    listener.beginLabeledStatement(next, labelCount);
+    token = parseStatement(token);
     listener.endLabeledStatement(labelCount);
     return token;
   }
@@ -4108,11 +4610,10 @@ class Parser {
   /// semicolon will be inserted before [token] and the semicolon will be
   /// returned.
   Token parseExpressionStatement(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
     // TODO(brianwilkerson): If the next token is not the start of a valid
     // expression, then this method shouldn't report that we have an expression
     // statement.
-    listener.beginExpressionStatement(token);
+    listener.beginExpressionStatement(token.next);
     token = parseExpression(token);
     token = ensureSemicolon(token);
     listener.endExpressionStatement(token);
@@ -4184,21 +4685,13 @@ class Parser {
     return token;
   }
 
-  Token parseRecoverExpression(Token token, Message message) {
-    return parseExpression(token.next);
-  }
-
   int expressionDepth = 0;
   Token parseExpression(Token token) {
-    // TODO(brianwilkerson) Accept the last consumed token.
-    // TODO(brianwilkerson): Remove the invocation of `previous` when this
-    // method can accept the last consumed token.
-    token = token.previous;
     if (expressionDepth++ > 500) {
       // This happens in degenerate programs, for example, with a lot of nested
       // list literals. This is provoked by, for example, the language test
       // deep_nesting1_negative_test.
-      return reportUnrecoverableError(token.next, fasta.messageStackOverflow);
+      return reportUnmatchedToken(token.next);
     }
     Token result = optional('throw', token.next)
         ? parseThrowExpression(token, true)
@@ -4217,7 +4710,7 @@ class Parser {
   Token parseConditionalExpressionRest(Token token) {
     Token question = token = token.next;
     assert(optional('?', question));
-    listener.beginConditionalExpression();
+    listener.beginConditionalExpression(token);
     token = parseExpressionWithoutCascade(token);
     Token colon = ensureColon(token);
     listener.handleConditionalExpressionColon();
@@ -4282,9 +4775,8 @@ class Parser {
                 new BeginToken(TokenType.OPEN_SQUARE_BRACKET, next.charOffset,
                     next.precedingComments),
                 new Token(TokenType.CLOSE_SQUARE_BRACKET, next.charOffset + 1));
-            // TODO(brianwilkerson): Remove the invocation of `previous` when
-            // `replaceToken` returns the last consumed token.
-            token = rewriter.replaceToken(next, replacement).previous;
+            rewriter.replaceTokenFollowing(token, replacement);
+            replacement.endToken = replacement.next;
             token = parseArgumentOrIndexStar(token, null);
           } else {
             token = reportUnexpectedToken(token.next);
@@ -4328,11 +4820,9 @@ class Parser {
     listener.beginCascade(cascadeOperator);
     if (optional('[', token.next)) {
       token = parseArgumentOrIndexStar(token, null);
-    } else if (token.next.isIdentifier) {
-      token = parseSend(token.next, IdentifierContext.expressionContinuation);
-      listener.endBinaryExpression(cascadeOperator);
     } else {
-      return reportUnexpectedToken(token.next);
+      token = parseSend(token, IdentifierContext.expressionContinuation);
+      listener.endBinaryExpression(cascadeOperator);
     }
     Token next = token.next;
     Token mark;
@@ -4340,7 +4830,7 @@ class Parser {
       mark = token;
       if (optional('.', next)) {
         Token period = next;
-        token = parseSend(next.next, IdentifierContext.expressionContinuation);
+        token = parseSend(next, IdentifierContext.expressionContinuation);
         next = token.next;
         listener.endBinaryExpression(period);
       }
@@ -4376,8 +4866,13 @@ class Parser {
       }
     } else if (identical(value, '+')) {
       // Dart no longer allows prefix-plus.
-      reportRecoverableError(token.next, fasta.messageUnsupportedPrefixPlus);
-      return parseUnaryExpression(token.next, allowCascades);
+      rewriteAndRecover(
+          token,
+          // TODO(danrubel): Consider reporting "missing identifier" instead.
+          fasta.messageUnsupportedPrefixPlus,
+          new SyntheticStringToken(
+              TokenType.IDENTIFIER, '', token.next.offset));
+      return parsePrimary(token, IdentifierContext.expression);
     } else if ((identical(value, '!')) ||
         (identical(value, '-')) ||
         (identical(value, '~'))) {
@@ -4414,25 +4909,21 @@ class Parser {
         Token openSquareBracket = next;
         bool old = mayParseFunctionExpressions;
         mayParseFunctionExpressions = true;
-        token = parseExpression(next.next);
+        token = parseExpression(next);
         next = token.next;
         mayParseFunctionExpressions = old;
         if (!optional(']', next)) {
           Message message = fasta.templateExpectedButGot.withArguments(']');
           Token newToken = new SyntheticToken(
               TokenType.CLOSE_SQUARE_BRACKET, next.charOffset);
-          next = rewriteAndRecover(token, message, newToken);
+          next = rewriteAndRecover(token, message, newToken).next;
         }
         listener.handleIndexedExpression(openSquareBracket, next);
         token = next;
         next = token.next;
       } else if (optional('(', next)) {
         if (typeArguments == null) {
-          next = listener.injectGenericCommentTypeList(next);
           if (isValidMethodTypeArguments(next)) {
-            // TODO(brianwilkerson): Remove the invocation of `previous` when
-            // `injectGenericCommentTypeList` (invoked above) returns the last
-            // consumed token.
             token = parseTypeArgumentsOpt(token);
             next = token.next;
           } else {
@@ -4451,9 +4942,6 @@ class Parser {
   }
 
   Token parsePrimary(Token token, IdentifierContext context) {
-    // TODO(brianwilkerson): Remove the invocation of `previous` when
-    // `injectGenericCommentTypeList` returns the last consumed token.
-    token = listener.injectGenericCommentTypeList(token.next).previous;
     final kind = token.next.kind;
     if (kind == IDENTIFIER_TOKEN) {
       return parseSendOrFunctionLiteral(token, context);
@@ -4519,7 +5007,7 @@ class Parser {
       } while (token is ErrorToken);
       return parsePrimary(previous, context);
     } else {
-      return parseSend(token.next, context);
+      return parseSend(token, context);
     }
   }
 
@@ -4528,24 +5016,38 @@ class Parser {
     assert(optional('(', next));
     Token nextToken = closeBraceTokenFor(next).next;
     int kind = nextToken.kind;
-    if (mayParseFunctionExpressions &&
-        (identical(kind, FUNCTION_TOKEN) ||
-            identical(kind, OPEN_CURLY_BRACKET_TOKEN) ||
-            (identical(kind, KEYWORD_TOKEN) &&
-                (optional('async', nextToken) ||
-                    optional('sync', nextToken))))) {
-      listener.handleNoTypeVariables(next);
-      return parseFunctionExpression(token);
-    } else {
-      bool old = mayParseFunctionExpressions;
-      mayParseFunctionExpressions = true;
-      token = parseParenthesizedExpression(token);
-      mayParseFunctionExpressions = old;
-      return token;
+    if (mayParseFunctionExpressions) {
+      if ((identical(kind, FUNCTION_TOKEN) ||
+          identical(kind, OPEN_CURLY_BRACKET_TOKEN))) {
+        listener.handleNoTypeVariables(next);
+        return parseFunctionExpression(token);
+      } else if (identical(kind, KEYWORD_TOKEN) ||
+          identical(kind, IDENTIFIER_TOKEN)) {
+        if (optional('async', nextToken) || optional('sync', nextToken)) {
+          listener.handleNoTypeVariables(next);
+          return parseFunctionExpression(token);
+        }
+        // Recovery
+        // If there is a stray simple identifier in the function expression
+        // because the user is typing (e.g. `() asy {}`) then continue parsing
+        // and allow parseFunctionExpression to report an unexpected token.
+        kind = nextToken.next.kind;
+        if ((identical(kind, FUNCTION_TOKEN) ||
+            identical(kind, OPEN_CURLY_BRACKET_TOKEN))) {
+          listener.handleNoTypeVariables(next);
+          return parseFunctionExpression(token);
+        }
+      }
     }
+    bool old = mayParseFunctionExpressions;
+    mayParseFunctionExpressions = true;
+    token = parseParenthesizedExpression(token);
+    mayParseFunctionExpressions = old;
+    return token;
   }
 
   Token parseParenthesizedExpression(Token token) {
+    Token previousToken = token;
     token = token.next;
     if (!optional('(', token)) {
       // Recover
@@ -4556,12 +5058,13 @@ class Parser {
       BeginToken replacement = link(
           new SyntheticBeginToken(TokenType.OPEN_PAREN, token.charOffset),
           new SyntheticToken(TokenType.CLOSE_PAREN, token.charOffset));
-      token = rewriter.insertToken(replacement, token);
+      token = rewriter.insertTokenAfter(previousToken, replacement).next;
     }
     BeginToken begin = token;
-    token = parseExpression(token.next).next;
+    token = parseExpression(token).next;
     if (!identical(begin.endGroup, token)) {
-      reportUnexpectedToken(token).next;
+      reportRecoverableError(
+          token, fasta.templateExpectedButGot.withArguments(')'));
       token = begin.endGroup;
     }
     listener.handleParenthesizedExpression(begin);
@@ -4612,6 +5115,7 @@ class Parser {
   /// if not. This is a suffix parser because it is assumed that type arguments
   /// have been parsed, or `listener.handleNoTypeArguments` has been executed.
   Token parseLiteralListSuffix(Token token, Token constKeyword) {
+    Token beforeToken = token;
     Token beginToken = token = token.next;
     assert(optional('[', token) || optional('[]', token));
     int count = 0;
@@ -4623,7 +5127,7 @@ class Parser {
           token = token.next;
           break;
         }
-        token = parseExpression(token.next).next;
+        token = parseExpression(token).next;
         ++count;
       } while (optional(',', token));
       mayParseFunctionExpressions = old;
@@ -4631,13 +5135,9 @@ class Parser {
       expect(']', token);
       return token;
     }
-    BeginToken replacement = link(
-        new BeginToken(TokenType.OPEN_SQUARE_BRACKET, token.offset),
-        new Token(TokenType.CLOSE_SQUARE_BRACKET, token.offset + 1));
-    rewriter.replaceToken(token, replacement);
-    token = replacement.next;
-    listener.handleLiteralList(0, replacement, constKeyword, token);
-    return token;
+    token = rewriteSquareBrackets(beforeToken).next;
+    listener.handleLiteralList(0, token, constKeyword, token.next);
+    return token.next;
   }
 
   /// This method parses the portion of a map literal that starts with the left
@@ -4658,17 +5158,41 @@ class Parser {
     int count = 0;
     bool old = mayParseFunctionExpressions;
     mayParseFunctionExpressions = true;
-    do {
+    while (true) {
       if (optional('}', token.next)) {
         token = token.next;
         break;
       }
-      token = parseMapLiteralEntry(token).next;
+      token = parseMapLiteralEntry(token);
+      Token next = token.next;
       ++count;
-    } while (optional(',', token));
+      if (!optional(',', next)) {
+        if (optional('}', next)) {
+          token = next;
+          break;
+        }
+        // Recovery
+        if (isExpressionStartForRecovery(next)) {
+          // If this looks like the start of an expression,
+          // then report an error, insert the comma, and continue parsing.
+          next = rewriteAndRecover(
+                  token,
+                  fasta.templateExpectedButGot.withArguments(','),
+                  new SyntheticToken(TokenType.COMMA, next.offset))
+              .next;
+        } else {
+          reportRecoverableError(
+              next, fasta.templateExpectedButGot.withArguments('}'));
+          // Scanner guarantees a closing curly bracket
+          token = beginToken.endGroup;
+          break;
+        }
+      }
+      token = next;
+    }
+    assert(optional('}', token));
     mayParseFunctionExpressions = old;
     listener.handleLiteralMap(count, beginToken, constKeyword, token);
-    expect('}', token);
     return token;
   }
 
@@ -4734,17 +5258,16 @@ class Parser {
     // Assume the listener rejects non-string keys.
     // TODO(brianwilkerson): Change the assumption above by moving error
     // checking into the parser, making it possible to recover.
-    token = parseExpression(token.next).next;
-    Token colon = token;
-    expect(':', colon);
-    token = parseExpression(token.next);
+    token = parseExpression(token);
+    Token colon = ensureColon(token);
+    token = parseExpression(colon);
     listener.endLiteralMapEntry(colon, token.next);
     return token;
   }
 
   Token parseSendOrFunctionLiteral(Token token, IdentifierContext context) {
     if (!mayParseFunctionExpressions) {
-      return parseSend(token.next, context);
+      return parseSend(token, context);
     } else {
       return parseType(token, TypeContinuation.SendOrFunctionLiteral, context);
     }
@@ -4752,13 +5275,15 @@ class Parser {
 
   Token parseRequiredArguments(Token token) {
     Token next = token.next;
-    if (optional('(', next)) {
-      token = parseArguments(token);
-    } else {
-      listener.handleNoArguments(next);
-      // TODO(brianwilkerson): Consider recovering by inserting parentheses.
-      token = reportUnexpectedToken(next);
+    if (!optional('(', next)) {
+      reportRecoverableError(
+          token, fasta.templateExpectedButGot.withArguments('('));
+      BeginToken replacement = link(
+          new SyntheticBeginToken(TokenType.OPEN_PAREN, next.offset),
+          new SyntheticToken(TokenType.CLOSE_PAREN, next.offset));
+      rewriter.insertTokenAfter(token, replacement);
     }
+    token = parseArguments(token);
     return token;
   }
 
@@ -4794,11 +5319,8 @@ class Parser {
   /// ;
   /// ```
   Token parseConstExpression(Token token) {
-    Token constKeyword = token.next;
+    Token constKeyword = token = token.next;
     assert(optional('const', constKeyword));
-    // TODO(brianwilkerson) Remove the invocation of `previous` when
-    // `injectGenericCommentTypeList` returns the last consumed token.
-    token = listener.injectGenericCommentTypeList(constKeyword.next).previous;
     Token next = token.next;
     final String value = next.stringValue;
     if ((identical(value, '[')) || (identical(value, '[]'))) {
@@ -4895,11 +5417,11 @@ class Parser {
       return next;
     } else {
       int count = 1;
-      token = ensureIdentifier(token.next, IdentifierContext.literalSymbol);
+      token = ensureIdentifier(token, IdentifierContext.literalSymbol);
       while (optional('.', token.next)) {
         count++;
         token = ensureIdentifier(
-            token.next.next, IdentifierContext.literalSymbolContinuation);
+            token.next, IdentifierContext.literalSymbolContinuation);
       }
       listener.endLiteralSymbol(hashToken, count);
       return token;
@@ -4912,24 +5434,32 @@ class Parser {
     listener.beginLiteralString(token);
     // Parsing the prefix, for instance 'x of 'x${id}y${id}z'
     int interpolationCount = 0;
-    var kind = token.next.kind;
+    Token next = token.next;
+    var kind = next.kind;
     while (kind != EOF_TOKEN) {
       if (identical(kind, STRING_INTERPOLATION_TOKEN)) {
         // Parsing ${expression}.
-        token = parseExpression(token.next.next).next;
-        expect('}', token);
+        token = parseExpression(next).next;
+        if (!optional('}', token)) {
+          reportRecoverableError(
+              token, fasta.templateExpectedButGot.withArguments('}'));
+          token = next.endGroup;
+        }
+        listener.handleInterpolationExpression(next, token);
       } else if (identical(kind, STRING_INTERPOLATION_IDENTIFIER_TOKEN)) {
         // Parsing $identifier.
-        token = parseIdentifierExpression(token.next);
+        token = parseIdentifierExpression(next);
+        listener.handleInterpolationExpression(next, null);
       } else {
         break;
       }
       ++interpolationCount;
       // Parsing the infix/suffix, for instance y and z' of 'x${id}y${id}z'
       token = parseStringPart(token);
-      kind = token.next.kind;
+      next = token.next;
+      kind = next.kind;
     }
-    listener.endLiteralString(interpolationCount, token.next);
+    listener.endLiteralString(interpolationCount, next);
     return token;
   }
 
@@ -4939,7 +5469,7 @@ class Parser {
       listener.handleThisExpression(next, IdentifierContext.expression);
       return next;
     } else {
-      return parseSend(token.next, IdentifierContext.expression);
+      return parseSend(token, IdentifierContext.expression);
     }
   }
 
@@ -4969,11 +5499,7 @@ class Parser {
   }
 
   Token parseSend(Token token, IdentifierContext context) {
-    // TODO(brianwilkerson) Accept the last consumed token.
-    Token beginToken = ensureIdentifier(token, context);
-    // TODO(brianwilkerson): Remove the invocation of `previous` when
-    // `injectGenericCommentTypeList` returns the last consumed token.
-    token = listener.injectGenericCommentTypeList(beginToken.next).previous;
+    Token beginToken = token = ensureIdentifier(token, context);
     if (isValidMethodTypeArguments(token.next)) {
       token = parseTypeArgumentsOpt(token);
     } else {
@@ -5034,22 +5560,40 @@ class Parser {
       }
       Token colon = null;
       if (optional(':', next.next)) {
-        token = ensureIdentifier(
-                token.next, IdentifierContext.namedArgumentReference)
-            .next;
+        token =
+            ensureIdentifier(token, IdentifierContext.namedArgumentReference)
+                .next;
         colon = token;
         hasSeenNamedArgument = true;
       } else if (hasSeenNamedArgument) {
         // Positional argument after named argument.
         reportRecoverableError(next, fasta.messagePositionalAfterNamedArgument);
       }
-      token = parseExpression(token.next);
+      token = parseExpression(token);
       next = token.next;
       if (colon != null) listener.handleNamedArgument(colon);
       ++argumentCount;
       if (!optional(',', next)) {
-        token = ensureCloseParen(token, begin);
-        break;
+        if (optional(')', next)) {
+          token = next;
+          break;
+        }
+        // Recovery
+        if (isExpressionStartForRecovery(next)) {
+          // If this looks like the start of an expression,
+          // then report an error, insert the comma, and continue parsing.
+          next = rewriteAndRecover(
+                  token,
+                  fasta.templateExpectedButGot.withArguments(','),
+                  new SyntheticToken(TokenType.COMMA, next.offset))
+              .next;
+        } else {
+          reportRecoverableError(
+              next, fasta.templateExpectedButGot.withArguments(')'));
+          // Scanner guarantees a closing parenthesis
+          token = begin.endGroup;
+          break;
+        }
       }
       token = next;
     }
@@ -5123,21 +5667,44 @@ class Parser {
   Token parseVariablesDeclarationMaybeSemicolon(
       Token token, bool endWithSemicolon) {
     token = parseMetadataStar(token);
+    Token next = token.next;
 
-    // If the next token has a type substitution comment /*=T*/, then
-    // the current 'var' token should be repealed and replaced.
-    // TODO(brianwilkerson): Shouldn't this also work when the current token is
-    // something other than `var`, such as in `Object /*=T*/ v;`?
-    if (optional('var', token.next)) {
-      // TODO(brianwilkerson): Remove the invocation of `previous` when
-      // `replaceTokenWithGenericCommentTypeAssign` returns the last consumed
-      // token.
-      token = listener
-          .replaceTokenWithGenericCommentTypeAssign(token.next, token.next.next)
-          .previous;
+    MemberKind memberKind = MemberKind.Local;
+    TypeContinuation typeContinuation;
+    Token varFinalOrConst;
+    if (isModifier(next)) {
+      if (optional('var', next)) {
+        typeContinuation = TypeContinuation.OptionalAfterVar;
+        varFinalOrConst = token = parseModifier(token);
+        next = token.next;
+      } else if (optional('final', next) || optional('const', next)) {
+        typeContinuation = TypeContinuation.Optional;
+        varFinalOrConst = token = parseModifier(token);
+        next = token.next;
+      }
+
+      if (isModifier(next)) {
+        // Recovery
+        ModifierRecoveryContext modifierContext = new ModifierRecoveryContext(
+            this, memberKind, null, true, typeContinuation);
+        token = modifierContext.parseRecovery(token,
+            varFinalOrConst: varFinalOrConst);
+
+        varFinalOrConst = modifierContext.varFinalOrConst;
+        listener.handleModifiers(modifierContext.modifierCount);
+
+        memberKind = modifierContext.memberKind;
+        typeContinuation = modifierContext.typeContinuation;
+        modifierContext = null;
+      } else {
+        listener.handleModifiers(1);
+      }
+    } else {
+      listener.handleModifiers(0);
     }
 
-    token = parseModifiers(token, MemberKind.Local, isVarAllowed: true);
+    token = parseType(
+        token, typeContinuation ?? TypeContinuation.Required, null, memberKind);
     return parseVariablesDeclarationMaybeSemicolonRest(token, endWithSemicolon);
   }
 
@@ -5161,8 +5728,8 @@ class Parser {
   }
 
   Token parseOptionallyInitializedIdentifier(Token token) {
-    Token nameToken = ensureIdentifier(
-        token.next, IdentifierContext.localVariableDeclaration);
+    Token nameToken =
+        ensureIdentifier(token, IdentifierContext.localVariableDeclaration);
     listener.beginInitializedIdentifier(nameToken);
     token = parseVariableInitializerOpt(nameToken);
     listener.endInitializedIdentifier(nameToken);
@@ -5180,13 +5747,13 @@ class Parser {
     listener.beginIfStatement(ifToken);
     token = parseParenthesizedExpression(ifToken);
     listener.beginThenStatement(token.next);
-    token = parseStatementOpt(token);
+    token = parseStatement(token);
     listener.endThenStatement(token);
     Token elseToken = null;
     if (optional('else', token.next)) {
       elseToken = token.next;
       listener.beginElseStatement(elseToken);
-      token = parseStatementOpt(elseToken);
+      token = parseStatement(elseToken);
       listener.endElseStatement(elseToken);
     }
     listener.endIfStatement(ifToken, elseToken);
@@ -5205,6 +5772,7 @@ class Parser {
   /// ;
   /// ```
   Token parseForStatement(Token awaitToken, Token token) {
+    // TODO(brianwilkerson): Consider moving `token` to be the first parameter.
     Token forKeyword = token.next;
     assert(awaitToken == null || optional('await', awaitToken));
     listener.beginForStatement(forKeyword);
@@ -5261,11 +5829,12 @@ class Parser {
   /// ;
   /// ```
   Token parseForRest(Token forToken, Token leftParenthesis, Token token) {
+    // TODO(brianwilkerson): Consider moving `token` to be the first parameter.
     Token leftSeparator = ensureSemicolon(token);
     if (optional(';', leftSeparator.next)) {
       token = parseEmptyStatement(leftSeparator);
     } else {
-      token = parseExpressionStatement(leftSeparator.next);
+      token = parseExpressionStatement(leftSeparator);
     }
     int expressionCount = 0;
     while (true) {
@@ -5274,7 +5843,7 @@ class Parser {
         token = next;
         break;
       }
-      token = parseExpression(token.next).next;
+      token = parseExpression(token).next;
       ++expressionCount;
       if (!optional(',', token)) {
         break;
@@ -5282,7 +5851,7 @@ class Parser {
     }
     expect(')', token);
     listener.beginForStatementBody(token.next);
-    token = parseStatementOpt(token);
+    token = parseStatement(token);
     listener.endForStatementBody(token.next);
     listener.endForStatement(
         forToken, leftParenthesis, leftSeparator, expressionCount, token.next);
@@ -5302,14 +5871,15 @@ class Parser {
   /// ```
   Token parseForInRest(
       Token awaitToken, Token forKeyword, Token leftParenthesis, Token token) {
+    // TODO(brianwilkerson): Consider moving `token` to be the first parameter.
     Token inKeyword = token.next;
     assert(optional('in', inKeyword) || optional(':', inKeyword));
     listener.beginForInExpression(inKeyword.next);
-    token = parseExpression(inKeyword.next).next;
+    token = parseExpression(inKeyword).next;
     listener.endForInExpression(token);
     expect(')', token);
     listener.beginForInBody(token.next);
-    token = parseStatementOpt(token);
+    token = parseStatement(token);
     listener.endForInBody(token.next);
     listener.endForIn(
         awaitToken, forKeyword, leftParenthesis, inKeyword, token.next);
@@ -5327,7 +5897,7 @@ class Parser {
     listener.beginWhileStatement(whileToken);
     token = parseParenthesizedExpression(whileToken);
     listener.beginWhileStatementBody(token.next);
-    token = parseStatementOpt(token);
+    token = parseStatement(token);
     listener.endWhileStatementBody(token.next);
     listener.endWhileStatement(whileToken, token.next);
     return token;
@@ -5343,7 +5913,7 @@ class Parser {
     assert(optional('do', doToken));
     listener.beginDoWhileStatement(doToken);
     listener.beginDoWhileStatementBody(doToken.next);
-    token = parseStatementOpt(doToken).next;
+    token = parseStatement(doToken).next;
     listener.endDoWhileStatementBody(token);
     Token whileToken = token;
     expect('while', token);
@@ -5359,15 +5929,12 @@ class Parser {
   /// ;
   /// ```
   Token parseBlock(Token token) {
-    Token begin = token = token.next;
+    Token begin = token = ensureBlock(token, null);
     listener.beginBlock(begin);
     int statementCount = 0;
-    if (!optional('{', token)) {
-      token = recoverFromMissingBlock(token);
-    }
     while (notEofOrValue('}', token.next)) {
       Token startToken = token.next;
-      token = parseStatementOpt(token);
+      token = parseStatement(token);
       if (identical(token.next, startToken)) {
         // No progress was made, so we report the current token as being invalid
         // and move forward.
@@ -5414,7 +5981,7 @@ class Parser {
     Token throwToken = token.next;
     assert(optional('throw', throwToken));
     token = allowCascades
-        ? parseExpression(throwToken.next)
+        ? parseExpression(throwToken)
         : parseExpressionWithoutCascade(throwToken);
     listener.handleThrowExpression(throwToken, token.next);
     return token;
@@ -5550,20 +6117,70 @@ class Parser {
   /// ;
   /// ```
   Token parseSwitchBlock(Token token) {
-    Token begin = token = token.next;
-    listener.beginSwitchBlock(begin);
-    expect('{', token);
+    Token beginSwitch = token = ensureBlock(token, null);
+    listener.beginSwitchBlock(beginSwitch);
     int caseCount = 0;
-    while (!identical(token.next.kind, EOF_TOKEN)) {
-      if (optional('}', token.next)) {
-        break;
+    Token defaultKeyword = null;
+    Token colonAfterDefault = null;
+    while (notEofOrValue('}', token.next)) {
+      Token beginCase = token.next;
+      int expressionCount = 0;
+      int labelCount = 0;
+      Token peek = peekPastLabels(beginCase);
+      while (true) {
+        // Loop until we find something that can't be part of a switch case.
+        String value = peek.stringValue;
+        if (identical(value, 'default')) {
+          while (!identical(token.next, peek)) {
+            token = parseLabel(token);
+            labelCount++;
+          }
+          if (defaultKeyword != null) {
+            reportRecoverableError(
+                token.next, fasta.messageSwitchHasMultipleDefaults);
+          }
+          defaultKeyword = token.next;
+          colonAfterDefault = token = ensureColon(defaultKeyword);
+          peek = token.next;
+          break;
+        } else if (identical(value, 'case')) {
+          while (!identical(token.next, peek)) {
+            token = parseLabel(token);
+            labelCount++;
+          }
+          Token caseKeyword = token.next;
+          if (defaultKeyword != null) {
+            reportRecoverableError(
+                caseKeyword, fasta.messageSwitchHasCaseAfterDefault);
+          }
+          listener.beginCaseExpression(caseKeyword);
+          token = parseExpression(caseKeyword);
+          token = ensureColon(token);
+          listener.endCaseExpression(token);
+          listener.handleCaseMatch(caseKeyword, token);
+          expressionCount++;
+          peek = peekPastLabels(token.next);
+        } else if (expressionCount > 0) {
+          break;
+        } else {
+          // Recovery
+          reportRecoverableError(
+              peek, fasta.templateExpectedToken.withArguments("case"));
+          Token endGroup = beginSwitch.endGroup;
+          while (token.next != endGroup) {
+            token = token.next;
+          }
+          peek = peekPastLabels(token.next);
+          break;
+        }
       }
-      token = parseSwitchCase(token);
+      token = parseStatementsInSwitchCase(token, peek, beginCase, labelCount,
+          expressionCount, defaultKeyword, colonAfterDefault);
       ++caseCount;
     }
     token = token.next;
-    listener.endSwitchBlock(caseCount, begin, token);
-    expect('}', token);
+    listener.endSwitchBlock(caseCount, beginSwitch, token);
+    assert(optional('}', token));
     return token;
   }
 
@@ -5577,60 +6194,15 @@ class Parser {
     return token;
   }
 
-  /// Parse a group of labels, cases and possibly a default keyword and the
-  /// statements that they select.
-  ///
-  /// ```
-  /// switchCase:
-  ///   label* 'case' expression ‘:’ statements
-  /// ;
-  ///
-  /// defaultCase:
-  ///   label* 'default' ‘:’ statements
-  /// ;
-  /// ```
-  Token parseSwitchCase(Token token) {
-    Token begin = token.next;
-    Token defaultKeyword = null;
-    Token colonAfterDefault = null;
-    int expressionCount = 0;
-    int labelCount = 0;
-    Token peek = peekPastLabels(begin);
-    while (true) {
-      // Loop until we find something that can't be part of a switch case.
-      String value = peek.stringValue;
-      if (identical(value, 'default')) {
-        while (!identical(token.next, peek)) {
-          token = parseLabel(token.next);
-          labelCount++;
-        }
-        defaultKeyword = token.next;
-        colonAfterDefault = token = defaultKeyword.next;
-        peek = expect(':', colonAfterDefault);
-        break;
-      } else if (identical(value, 'case')) {
-        while (!identical(token.next, peek)) {
-          token = parseLabel(token.next);
-          labelCount++;
-        }
-        Token caseKeyword = token.next;
-        listener.beginCaseExpression(caseKeyword);
-        token = parseExpression(caseKeyword.next).next;
-        listener.endCaseExpression(token);
-        Token colonToken = token;
-        expect(':', colonToken);
-        listener.handleCaseMatch(caseKeyword, colonToken);
-        expressionCount++;
-        peek = peekPastLabels(token.next);
-      } else {
-        if (expressionCount == 0) {
-          // TODO(ahe): This is probably easy to recover from.
-          reportUnrecoverableError(
-              token.next, fasta.templateExpectedButGot.withArguments("case"));
-        }
-        break;
-      }
-    }
+  /// Parse statements after a switch `case:` or `default:`.
+  Token parseStatementsInSwitchCase(
+      Token token,
+      Token peek,
+      Token begin,
+      int labelCount,
+      int expressionCount,
+      Token defaultKeyword,
+      Token colonAfterDefault) {
     listener.beginSwitchCase(labelCount, expressionCount, begin);
     // Finally zero or more statements.
     int statementCount = 0;
@@ -5643,7 +6215,7 @@ class Parser {
         break;
       } else {
         Token startToken = token.next;
-        token = parseStatementOpt(token);
+        token = parseStatement(token);
         Token next = token.next;
         if (identical(next, startToken)) {
           // No progress was made, so we report the current token as being
@@ -5671,7 +6243,7 @@ class Parser {
     assert(optional('break', breakKeyword));
     bool hasTarget = false;
     if (token.next.isIdentifier) {
-      token = ensureIdentifier(token.next, IdentifierContext.labelReference);
+      token = ensureIdentifier(token, IdentifierContext.labelReference);
       hasTarget = true;
     }
     token = ensureSemicolon(token);
@@ -5694,13 +6266,13 @@ class Parser {
     expect('(', token);
     bool old = mayParseFunctionExpressions;
     mayParseFunctionExpressions = true;
-    token = parseExpression(token.next).next;
+    token = parseExpression(token).next;
     if (optional(',', token)) {
       if (optional(')', token.next)) {
         token = token.next;
       } else {
         commaToken = token;
-        token = parseExpression(token.next).next;
+        token = parseExpression(token).next;
       }
     }
     if (optional(',', token)) {
@@ -5710,7 +6282,7 @@ class Parser {
       } else {
         while (optional(',', token)) {
           Token begin = token.next;
-          token = parseExpression(token.next).next;
+          token = parseExpression(token).next;
           listener.handleExtraneousExpression(
               begin, fasta.messageAssertExtraneousArgument);
         }
@@ -5749,7 +6321,7 @@ class Parser {
     assert(optional('continue', continueKeyword));
     bool hasTarget = false;
     if (token.next.isIdentifier) {
-      token = ensureIdentifier(token.next, IdentifierContext.labelReference);
+      token = ensureIdentifier(token, IdentifierContext.labelReference);
       hasTarget = true;
     }
     token = ensureSemicolon(token);
@@ -5769,45 +6341,67 @@ class Parser {
     return token;
   }
 
-  /// Report that the given [token] was expected to be the beginning of a block
-  /// but isn't, insert a synthetic pair of curly braces, and return the opening
-  /// curly brace.
-  Token recoverFromMissingBlock(Token token) {
-    // TODO(brianwilkerson): Add context information (as a parameter) so that we
-    // can (a) generate a better error and (b) unify this method with
-    // `recoverFromMissingClassBody` and `recoverFromMissingFunctionBody`.
-    reportRecoverableError(token, fasta.messageExpectedBlock);
-    BeginToken replacement = link(
-        new SyntheticBeginToken(TokenType.OPEN_CURLY_BRACKET, token.offset),
-        new SyntheticToken(TokenType.CLOSE_CURLY_BRACKET, token.offset));
-    rewriter.insertToken(replacement, token);
-    return replacement;
+  /// Given a token ([beforeToken]) that is known to be before another [token],
+  /// return the token that is immediately before the [token].
+  Token previousToken(Token beforeToken, Token token) {
+    Token next = beforeToken.next;
+    while (next != token && next != beforeToken) {
+      beforeToken = next;
+      next = beforeToken.next;
+    }
+    return beforeToken;
   }
 
-  /// Report that the given [token] was expected to be the beginning of a class
-  /// body but isn't, insert a synthetic pair of curly braces, and return the
-  /// opening curly brace.
-  Token recoverFromMissingClassBody(Token token) {
-    reportRecoverableError(
-        token, fasta.templateExpectedClassBody.withArguments(token));
-    BeginToken replacement = link(
-        new SyntheticBeginToken(TokenType.OPEN_CURLY_BRACKET, token.offset),
-        new SyntheticToken(TokenType.CLOSE_CURLY_BRACKET, token.offset));
-    rewriter.insertToken(replacement, token);
-    return replacement;
+  /// Recover from finding an invalid class member. The metadata for the member,
+  /// if any, has already been parsed (and events have already been generated).
+  /// The member was expected to start with the token after [token].
+  Token recoverFromInvalidClassMember(
+      Token token,
+      Token beforeStart,
+      Token externalToken,
+      Token staticToken,
+      Token covariantToken,
+      Token varFinalOrConst,
+      TypeContinuation typeContinuation) {
+    Token next = token.next;
+    if (staticToken != null ||
+        covariantToken != null ||
+        varFinalOrConst != null ||
+        next.isIdentifier) {
+      // Looks like a partial field declaration
+      token = parseFields(
+          beforeStart,
+          externalToken,
+          staticToken,
+          covariantToken,
+          varFinalOrConst,
+          null,
+          token,
+          MemberKind.NonStaticField,
+          typeContinuation);
+      listener.endMember();
+      return token;
+    }
+    if (optional(';', next)) {
+      // Report and skip extra semicolons that appear between members.
+      // TODO(brianwilkerson): Provide a more specific error message.
+      reportRecoverableErrorWithToken(next, fasta.templateExpectedClassMember);
+      listener.handleInvalidMember(next);
+      listener.endMember();
+      return next;
+    }
+    return reportUnrecoverableErrorWithToken(
+        next, fasta.templateExpectedClassMember);
   }
 
-  /// Report that the given [token] was expected to be the beginning of a block
-  /// function body but isn't, insert a synthetic pair of curly braces, and
-  /// return the opening curly brace.
-  Token recoverFromMissingFunctionBody(Token token) {
-    reportRecoverableError(
-        token, fasta.templateExpectedFunctionBody.withArguments(token));
-    BeginToken replacement = link(
-        new SyntheticBeginToken(TokenType.OPEN_CURLY_BRACKET, token.offset),
-        new SyntheticToken(TokenType.CLOSE_CURLY_BRACKET, token.offset));
-    rewriter.insertToken(replacement, token);
-    return replacement;
+  /// Report that the nesting depth of the code being parsed is too large for
+  /// the parser to safely handle. Return the EOF token in order to cause the
+  /// parser to unwind and exit.
+  Token recoverFromStackOverflow(Token token) {
+    listener.handleRecoverableError(fasta.messageStackOverflow, token, token);
+    Token semicolon = new SyntheticToken(TokenType.SEMICOLON, token.offset);
+    listener.handleEmptyStatement(semicolon);
+    return skipToEof(token);
   }
 
   /// Don't call this method. Should only be used as a last resort when there
@@ -5877,6 +6471,12 @@ class Parser {
     return nextToken;
   }
 
+  Token reportInvalidTopLevelDeclaration(Token token) {
+    reportRecoverableErrorWithToken(token, fasta.templateExpectedDeclaration);
+    listener.handleInvalidTopLevelDeclaration(token);
+    return token;
+  }
+
   Token reportUnmatchedToken(BeginToken token) {
     return reportUnrecoverableError(
         token,
@@ -5889,6 +6489,60 @@ class Parser {
         token, fasta.templateUnexpectedToken);
   }
 
+  Token reportAndSkipClassInClass(Token token) {
+    assert(optional('class', token));
+    reportRecoverableError(token, fasta.messageClassInClass);
+    listener.handleInvalidMember(token);
+    Token next = token.next;
+    // If the declaration appears to be a valid class declaration
+    // then skip the entire declaration so that we only generate the one
+    // error (above) rather than a plethora of unhelpful errors.
+    if (next.isIdentifier) {
+      // skip class name
+      token = next;
+      next = token.next;
+      // TODO(danrubel): consider parsing (skipping) the class header
+      // with a recovery listener so that no events are generated
+      if (optional('{', next) && next.endGroup != null) {
+        // skip class body
+        token = next.endGroup;
+      }
+    }
+    return token;
+  }
+
+  Token reportAndSkipEnumInClass(Token token) {
+    assert(optional('enum', token));
+    reportRecoverableError(token, fasta.messageEnumInClass);
+    listener.handleInvalidMember(token);
+    Token next = token.next;
+    // If the declaration appears to be a valid enum declaration
+    // then skip the entire declaration so that we only generate the one
+    // error (above) rather than a plethora of unhelpful errors.
+    if (next.isIdentifier) {
+      // skip enum name
+      token = next;
+      next = token.next;
+      if (optional('{', next) && next.endGroup != null) {
+        // TODO(danrubel): Consider replacing this `skip enum` functionality
+        // with something that can parse and resolve the declaration
+        // even though it is in a class context
+        token = next.endGroup;
+      }
+    }
+    return token;
+  }
+
+  Token reportAndSkipTypedefInClass(Token token) {
+    assert(optional('typedef', token));
+    reportRecoverableError(token, fasta.messageTypedefInClass);
+    listener.handleInvalidMember(token);
+    // TODO(brianwilkerson): If the declaration appears to be a valid typedef
+    // then skip the entire declaration so that we generate a single error
+    // (above) rather than many unhelpful errors.
+    return token;
+  }
+
   /// Create a short token chain from the [beginToken] and [endToken] and return
   /// the [beginToken].
   Token link(BeginToken beginToken, Token endToken) {
@@ -5899,7 +6553,15 @@ class Parser {
 
   /// Create and return a token whose next token is the given [token].
   Token syntheticPreviousToken(Token token) {
-    Token before = new Token.eof(0);
+    // Return the previous token if there is one so that any token inserted
+    // before `token` will be properly inserted into the token stream.
+    // TODO(danrubel): remove this once all methods have been converted to
+    // use and return the last token consumed and the `previous` field
+    // has been removed.
+    if (token.previous != null) {
+      return token.previous;
+    }
+    Token before = new Token.eof(-1);
     before.next = token;
     return before;
   }

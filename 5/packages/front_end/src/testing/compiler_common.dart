@@ -5,14 +5,19 @@
 /// Common compiler options and helper functions used for testing.
 library front_end.testing.compiler_options_common;
 
-import 'dart:async';
+import 'dart:async' show Future;
 
-import 'dart:io' show Platform;
+import 'package:kernel/ast.dart' show Library, Program;
 
-import 'package:front_end/front_end.dart';
-import 'package:front_end/memory_file_system.dart';
-import 'package:front_end/src/testing/hybrid_file_system.dart';
-import 'package:kernel/ast.dart';
+import '../api_prototype/front_end.dart'
+    show CompilerOptions, kernelForBuildUnit, kernelForProgram, summaryFor;
+
+import '../api_prototype/memory_file_system.dart' show MemoryFileSystem;
+
+import '../compute_platform_binaries_location.dart'
+    show computePlatformBinariesLocation;
+
+import '../testing/hybrid_file_system.dart' show HybridFileSystem;
 
 /// Generate kernel for a script.
 ///
@@ -56,10 +61,13 @@ Future<Program> compileUnit(List<String> inputs, Map<String, dynamic> sources,
 ///
 /// Wraps [summaryFor] with some default testing options (see [setup]).
 Future<List<int>> summarize(List<String> inputs, Map<String, dynamic> sources,
-    {List<String> inputSummaries: const [], CompilerOptions options}) async {
+    {List<String> inputSummaries: const [],
+    CompilerOptions options,
+    bool truncate: false}) async {
   options ??= new CompilerOptions();
   await setup(options, sources, inputSummaries: inputSummaries);
-  return await summaryFor(inputs.map(toTestUri).toList(), options);
+  return await summaryFor(inputs.map(toTestUri).toList(), options,
+      truncate: truncate);
 }
 
 /// Defines a default set of options for testing:
@@ -96,8 +104,7 @@ Future<Null> setup(CompilerOptions options, Map<String, dynamic> sources,
     ..packagesFileUri = toTestUri('.packages');
 
   if (options.sdkSummary == null) {
-    options.sdkRoot =
-        Uri.base.resolve(Platform.resolvedExecutable).resolve("./");
+    options.sdkRoot = computePlatformBinariesLocation();
   }
 }
 

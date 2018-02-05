@@ -310,7 +310,8 @@ class ResolverImpl implements Resolver {
 
     var importUri = _getSourceUri(element);
     var spanPath = importUri != null ? importUri.toString() : assetId.path;
-    return new SourceFile(sources[assetId].rawContents, url: spanPath);
+    return new SourceFile.fromString(sources[assetId].rawContents,
+        url: spanPath);
   }
 }
 
@@ -435,7 +436,8 @@ class AssetBasedSource extends Source {
   SourceFile _getSourceFile([String contents]) {
     var uri = assetIdToUri(assetId);
     var path = uri != null ? uri : assetId.path;
-    return new SourceFile(contents != null ? contents : rawContents, url: path);
+    return new SourceFile.fromString(contents != null ? contents : rawContents,
+        url: path);
   }
 }
 

@@ -7,6 +7,7 @@ library analyzer.src.generated.element_resolver;
 import 'dart:collection';
 
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/ast_factory.dart';
 import 'package:analyzer/dart/ast/syntactic_entity.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
@@ -19,12 +20,16 @@ import 'package:analyzer/src/dart/ast/ast.dart'
         IdentifierImpl,
         PrefixedIdentifierImpl,
         SimpleIdentifierImpl;
+import 'package:analyzer/src/dart/ast/ast_factory.dart';
 import 'package:analyzer/src/dart/ast/token.dart';
+import 'package:analyzer/src/dart/ast/utilities.dart';
 import 'package:analyzer/src/dart/element/element.dart';
 import 'package:analyzer/src/dart/element/type.dart';
 import 'package:analyzer/src/error/codes.dart';
 import 'package:analyzer/src/generated/engine.dart';
 import 'package:analyzer/src/generated/resolver.dart';
+import 'package:analyzer/src/generated/testing/token_factory.dart';
+import 'package:analyzer/src/task/strong/checker.dart';
 
 /**
  * An object used by instances of [ResolverVisitor] to resolve references within
@@ -128,6 +133,11 @@ class ElementResolver extends SimpleAstVisitor<Object> {
   TypePromotionManager _promoteManager;
 
   /**
+   * Gets an instance of [AstFactory] based on the standard AST implementation.
+   */
+  AstFactory _astFactory;
+
+  /**
    * Initialize a newly created visitor to work for the given [_resolver] to
    * resolve the nodes in a compilation unit.
    */
@@ -140,6 +150,7 @@ class ElementResolver extends SimpleAstVisitor<Object> {
     _typeType = _resolver.typeProvider.typeType;
     _subtypeManager = new SubtypeManager();
     _promoteManager = _resolver.promoteManager;
+    _astFactory = new AstFactoryImpl();
   }
 
   /**
@@ -166,7 +177,7 @@ class ElementResolver extends SimpleAstVisitor<Object> {
       Expression leftHandSide = node.leftHandSide;
       if (leftHandSide != null) {
         String methodName = operatorType.lexeme;
-        DartType staticType = _getStaticType(leftHandSide);
+        DartType staticType = _getStaticType(leftHandSide, read: true);
         MethodElement staticMethod =
             _lookUpMethod(leftHandSide, staticType, methodName);
         node.staticElement = staticMethod;
@@ -614,9 +625,23 @@ class ElementResolver extends SimpleAstVisitor<Object> {
     }
     Element staticElement;
     Element propagatedElement;
+    bool previewDart2 = _definingLibrary.context.analysisOptions.previewDart2;
     if (target == null) {
       staticElement = _resolveInvokedElement(methodName);
       propagatedElement = null;
+
+      if (previewDart2 &&
+          staticElement != null &&
+          staticElement is ClassElement) {
+        // cases: C() or C<>()
+        InstanceCreationExpression instanceCreationExpression =
+            _handleImplicitConstructorCase(node, staticElement);
+        if (instanceCreationExpression != null) {
+          // If a non-null is returned, the node was created, replaced, so we
+          // can return here.
+          return null;
+        }
+      }
     } else if (methodName.name == FunctionElement.LOAD_LIBRARY_NAME &&
         _isDeferredPrefix(target)) {
       if (node.operator.type == TokenType.QUESTION_PERIOD) {
@@ -640,6 +665,29 @@ class ElementResolver extends SimpleAstVisitor<Object> {
       //
       bool isConditional = node.operator.type == TokenType.QUESTION_PERIOD;
       ClassElement typeReference = getTypeReference(target);
+
+      if (previewDart2) {
+        InstanceCreationExpression instanceCreationExpression;
+        if ((target is SimpleIdentifier &&
+                target.staticElement is PrefixElement) ||
+            (target is PrefixedIdentifier &&
+                target.prefix.staticElement is PrefixElement)) {
+          // case: p.C(), p.C<>() or p.C.n()
+          instanceCreationExpression =
+              _handlePrefixedImplicitConstructorCase(node, target);
+        } else if (typeReference is ClassElement) {
+          // case: C.n()
+          instanceCreationExpression =
+              _handleImplicitConstructorCase(node, typeReference);
+        }
+
+        if (instanceCreationExpression != null) {
+          // If a non-null is returned, the node was created, replaced, so we
+          // can return here.
+          return null;
+        }
+      }
+
       if (typeReference != null) {
         if (node.isCascaded) {
           typeReference = _typeType.element;
@@ -979,7 +1027,7 @@ class ElementResolver extends SimpleAstVisitor<Object> {
         operatorType == TokenType.MINUS_MINUS) {
       Expression operand = node.operand;
       String methodName = _getPrefixOperator(node);
-      DartType staticType = _getStaticType(operand);
+      DartType staticType = _getStaticType(operand, read: true);
       MethodElement staticMethod =
           _lookUpMethod(operand, staticType, methodName);
       node.staticElement = staticMethod;
@@ -1418,17 +1466,6 @@ class ElementResolver extends SimpleAstVisitor<Object> {
   }
 
   /**
-   * Return `true` if the given [element] is or inherits from a class marked
-   * with `@proxy`.
-   * 
-   * See [ClassElement.isOrInheritsProxy].
-   */
-  bool _hasProxy(Element element) =>
-      !_resolver.strongMode &&
-      element is ClassElement &&
-      element.isOrInheritsProxy;
-
-  /**
    * Look for any declarations of the given [identifier] that are imported using
    * a prefix. Return the element that was found, or `null` if the name is not
    * imported using a prefix.
@@ -1555,8 +1592,8 @@ class ElementResolver extends SimpleAstVisitor<Object> {
    * Return the static type of the given [expression] that is to be used for
    * type analysis.
    */
-  DartType _getStaticType(Expression expression) {
-    DartType staticType = _getStaticTypeOrFunctionType(expression);
+  DartType _getStaticType(Expression expression, {bool read: false}) {
+    DartType staticType = _getStaticTypeOrFunctionType(expression, read: read);
     if (staticType is FunctionType) {
       //
       // All function types are subtypes of 'Function', which is itself a
@@ -1567,12 +1604,188 @@ class ElementResolver extends SimpleAstVisitor<Object> {
     return staticType;
   }
 
-  DartType _getStaticTypeOrFunctionType(Expression expression) {
+  DartType _getStaticTypeOrFunctionType(Expression expression,
+      {bool read: false}) {
     if (expression is NullLiteral) {
       return _resolver.typeProvider.nullType;
     }
-    return _resolveTypeParameter(expression.staticType);
+    DartType type = read ? getReadType(expression) : expression.staticType;
+    return _resolveTypeParameter(type);
   }
+
+  /**
+   * Return the newly created and replaced [InstanceCreationExpression], or
+   * `null` if this is not an implicit constructor case.
+   *
+   * This method covers the "ClassName()" and "ClassName.namedConstructor()"
+   * cases for the prefixed cases, i.e. "libraryPrefix.ClassName()" and
+   * "libraryPrefix.ClassName.namedConstructor()" see
+   * [_handlePrefixedImplicitConstructorCase].
+   */
+  InstanceCreationExpression _handleImplicitConstructorCase(
+      MethodInvocation node, ClassElement classElement) {
+    // If target == null, then this is the unnamed constructor, A(), case,
+    // otherwise it is the named constructor A.name() case.
+    Expression target = node.realTarget;
+    bool isNamedConstructorCase = target != null;
+
+    // If we are in the named constructor case, verify that the target is a
+    // SimpleIdentifier and that the operator is '.'
+    SimpleIdentifier targetSimpleId;
+    if (isNamedConstructorCase) {
+      if (target is SimpleIdentifier &&
+          node.operator.type == TokenType.PERIOD) {
+        targetSimpleId = target;
+      } else {
+        // Return null as this is not an implicit constructor case.
+        return null;
+      }
+    }
+
+    // Before any ASTs are created, look up ConstructorElement to see if we
+    // should construct an [InstanceCreationExpression] to replace this
+    // [MethodInvocation].
+    ConstructorElement constructorElt;
+    if (isNamedConstructorCase) {
+      constructorElt = classElement.type
+          .lookUpConstructor(node.methodName.name, _definingLibrary);
+    } else {
+      constructorElt =
+          classElement.type.lookUpConstructor(null, _definingLibrary);
+    }
+    // If the constructor was not looked up, return `null` so resulting
+    // resolution, such as error messages, will proceed as a [MethodInvocation].
+    if (constructorElt == null) {
+      return null;
+    }
+
+    // Create the Constructor name, in each case: A[.named]()
+    TypeName typeName;
+    ConstructorName constructorName;
+    if (isNamedConstructorCase) {
+      // A.named()
+      typeName = _astFactory.typeName(targetSimpleId, node.typeArguments);
+      typeName.type = classElement.type;
+      constructorName =
+          _astFactory.constructorName(typeName, node.operator, node.methodName);
+    } else {
+      // A()
+      typeName = _astFactory.typeName(node.methodName, node.typeArguments);
+      typeName.type = classElement.type;
+      constructorName = _astFactory.constructorName(typeName, null, null);
+    }
+    InstanceCreationExpression instanceCreationExpression = _astFactory
+        .instanceCreationExpression(null, constructorName, node.argumentList);
+
+    if (isNamedConstructorCase) {
+      constructorName.name.staticElement = constructorElt;
+    }
+    constructorName.staticElement = constructorElt;
+    instanceCreationExpression.staticElement = constructorElt;
+    instanceCreationExpression.staticType = classElement.type;
+
+    // Finally, do the node replacement, true is returned iff the replacement
+    // was successful, only return the new node if it was successful.
+    if (NodeReplacer.replace(node, instanceCreationExpression)) {
+      return instanceCreationExpression;
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Return the newly created and replaced [InstanceCreationExpression], or
+   * `null` if this is not an implicit constructor case.
+   *
+   * This method covers the "libraryPrefix.ClassName()" and
+   * "libraryPrefix.ClassName.namedConstructor()" cases for the non-prefixed
+   * cases, i.e. "ClassName()" and "ClassName.namedConstructor()" see
+   * [_handleImplicitConstructorCase].
+   */
+  InstanceCreationExpression _handlePrefixedImplicitConstructorCase(
+      MethodInvocation node, Identifier libraryPrefixId) {
+    bool isNamedConstructorCase = libraryPrefixId is PrefixedIdentifier;
+    ClassElement classElement;
+    if (isNamedConstructorCase) {
+      var elt = (libraryPrefixId as PrefixedIdentifier).staticElement;
+      if (elt is ClassElement) {
+        classElement = elt;
+      }
+    } else {
+      LibraryElementImpl libraryElementImpl = _getImportedLibrary(node.target);
+      classElement = libraryElementImpl.getType(node.methodName.name);
+    }
+
+    // Before any ASTs are created, look up ConstructorElement to see if we
+    // should construct an [InstanceCreationExpression] to replace this
+    // [MethodInvocation].
+    if (classElement == null) {
+      return null;
+    }
+    ConstructorElement constructorElt;
+    if (isNamedConstructorCase) {
+      constructorElt = classElement.type
+          .lookUpConstructor(node.methodName.name, _definingLibrary);
+    } else {
+      constructorElt =
+          classElement.type.lookUpConstructor(null, _definingLibrary);
+    }
+    // If the constructor was not looked up, return `null` so resulting
+    // resolution, such as error messages, will proceed as a [MethodInvocation].
+    if (constructorElt == null) {
+      return null;
+    }
+
+    // Create the Constructor name, in each case: A[.named]()
+    TypeName typeName;
+    ConstructorName constructorName;
+    if (isNamedConstructorCase) {
+      // p.A.n()
+      // libraryPrefixId is a PrefixedIdentifier in this case
+      typeName = _astFactory.typeName(libraryPrefixId, node.typeArguments);
+      typeName.type = classElement.type;
+      constructorName =
+          _astFactory.constructorName(typeName, node.operator, node.methodName);
+    } else {
+      // p.A()
+      // libraryPrefixId is a SimpleIdentifier in this case
+      PrefixedIdentifier prefixedIdentifier = _astFactory.prefixedIdentifier(
+          libraryPrefixId,
+          TokenFactory.tokenFromType(TokenType.PERIOD),
+          node.methodName);
+      typeName = _astFactory.typeName(prefixedIdentifier, node.typeArguments);
+      typeName.type = classElement.type;
+      constructorName = _astFactory.constructorName(typeName, null, null);
+    }
+    InstanceCreationExpression instanceCreationExpression = _astFactory
+        .instanceCreationExpression(null, constructorName, node.argumentList);
+
+    if (isNamedConstructorCase) {
+      constructorName.name.staticElement = constructorElt;
+    }
+    constructorName.staticElement = constructorElt;
+    instanceCreationExpression.staticElement = constructorElt;
+    instanceCreationExpression.staticType = classElement.type;
+
+    // Finally, do the node replacement, true is returned iff the replacement
+    // was successful, only return the new node if it was successful.
+    if (NodeReplacer.replace(node, instanceCreationExpression)) {
+      return instanceCreationExpression;
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Return `true` if the given [element] is or inherits from a class marked
+   * with `@proxy`.
+   *
+   * See [ClassElement.isOrInheritsProxy].
+   */
+  bool _hasProxy(Element element) =>
+      !_resolver.strongMode &&
+      element is ClassElement &&
+      element.isOrInheritsProxy;
 
   /**
    * Check for a generic method & apply type arguments if any were passed.

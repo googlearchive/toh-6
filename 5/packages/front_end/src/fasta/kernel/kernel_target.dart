@@ -42,7 +42,7 @@ import 'package:kernel/ast.dart'
 
 import 'package:kernel/type_algebra.dart' show substitute;
 
-import '../../../file_system.dart' show FileSystem;
+import '../../api_prototype/file_system.dart' show FileSystem;
 
 import '../compiler_context.dart' show CompilerContext;
 
@@ -69,8 +69,6 @@ import '../source/source_loader.dart' show SourceLoader;
 import '../target_implementation.dart' show TargetImplementation;
 
 import '../uri_translator.dart' show UriTranslator;
-
-import '../util/relativize.dart' show relativizeUri;
 
 import 'kernel_builder.dart'
     show
@@ -102,7 +100,7 @@ class KernelTarget extends TargetImplementation {
   final DillTarget dillTarget;
 
   /// Shared with [CompilerContext].
-  final Map<String, Source> uriToSource;
+  final Map<Uri, Source> uriToSource;
 
   /// The [MetadataCollector] to write metadata to.
   final MetadataCollector metadataCollector;
@@ -121,7 +119,7 @@ class KernelTarget extends TargetImplementation {
 
   KernelTarget(this.fileSystem, this.includeComments, DillTarget dillTarget,
       UriTranslator uriTranslator,
-      {Map<String, Source> uriToSource, MetadataCollector metadataCollector})
+      {Map<Uri, Source> uriToSource, MetadataCollector metadataCollector})
       : dillTarget = dillTarget,
         uriToSource = uriToSource ?? CompilerContext.current.uriToSource,
         metadataCollector = metadataCollector,
@@ -135,8 +133,7 @@ class KernelTarget extends TargetImplementation {
 
   void addSourceInformation(
       Uri uri, List<int> lineStarts, List<int> sourceCode) {
-    String fileUri = relativizeUri(uri);
-    uriToSource[fileUri] = new Source(lineStarts, sourceCode);
+    uriToSource[uri] = new Source(lineStarts, sourceCode);
   }
 
   void read(Uri uri) {
@@ -186,30 +183,17 @@ class KernelTarget extends TargetImplementation {
     });
   }
 
-  List<ClassBuilder> collectAllClasses() {
-    List<ClassBuilder> result = <ClassBuilder>[];
-    loader.builders.forEach((Uri uri, LibraryBuilder library) {
-      library.forEach((String name, Builder member) {
-        if (member is KernelClassBuilder) {
-          result.add(member);
-        }
-      });
-      // TODO(ahe): Translate this if needed:
-      // if (library is KernelLibraryBuilder) {
-      //   result.addAll(library.mixinApplicationClasses);
-      // }
-    });
-    return result;
-  }
-
-  List<SourceClassBuilder> collectAllSourceClasses() {
+  /// Returns classes defined in libraries in [loader].
+  List<SourceClassBuilder> collectMyClasses() {
     List<SourceClassBuilder> result = <SourceClassBuilder>[];
     loader.builders.forEach((Uri uri, LibraryBuilder library) {
-      library.forEach((String name, Builder member) {
-        if (member is SourceClassBuilder && !member.isPatch) {
-          result.add(member);
-        }
-      });
+      if (library.loader == loader) {
+        library.forEach((String name, Builder member) {
+          if (member is SourceClassBuilder && !member.isPatch) {
+            result.add(member);
+          }
+        });
+      }
     });
     return result;
   }
@@ -240,31 +224,35 @@ class KernelTarget extends TargetImplementation {
     try {
       loader.createTypeInferenceEngine();
       await loader.buildOutlines();
-      loader.coreLibrary
-          .becomeCoreLibrary(const DynamicType(), const VoidType());
+      loader.coreLibrary.becomeCoreLibrary(const DynamicType());
       dynamicType.bind(loader.coreLibrary["dynamic"]);
       loader.resolveParts();
       loader.computeLibraryScopes();
       loader.resolveTypes();
-      loader.checkSemantics();
-      loader.buildProgram();
-      List<SourceClassBuilder> sourceClasses = collectAllSourceClasses();
-      installDefaultSupertypes();
-      installDefaultConstructors(sourceClasses);
-      loader.resolveConstructors();
+      if (loader.target.strongMode) {
+        loader.instantiateToBound(dynamicType, objectClassBuilder);
+      }
+      List<SourceClassBuilder> myClasses = collectMyClasses();
+      loader.checkSemantics(myClasses);
       loader.finishTypeVariables(objectClassBuilder);
+      loader.buildProgram();
+      installDefaultSupertypes();
+      installDefaultConstructors(myClasses);
+      loader.resolveConstructors();
       program =
           link(new List<Library>.from(loader.libraries), nameRoot: nameRoot);
       if (metadataCollector != null) {
         program.addMetadataRepository(metadataCollector.repository);
       }
-      loader.computeHierarchy(program);
-      loader.checkOverrides(sourceClasses);
+      computeCoreTypes();
+      loader.computeHierarchy();
       if (!loader.target.disableTypeInference) {
-        loader.prepareTopLevelInference(sourceClasses);
-        loader.performTopLevelInference(sourceClasses);
+        loader.prepareTopLevelInference(myClasses);
+        loader.performTopLevelInference(myClasses);
       }
+      loader.checkOverrides(myClasses);
     } on deprecated_InputError catch (e) {
+      ticker.logMs("Got deprecated_InputError");
       handleInputError(e, isFullProgram: false);
     } catch (e, s) {
       return reportCrash(e, s, loader?.currentUriForCrashReporting);
@@ -288,10 +276,11 @@ class KernelTarget extends TargetImplementation {
     }
 
     try {
+      ticker.logMs("Building program");
       await loader.buildBodies();
-      loader.finishStaticInvocations();
       loader.finishDeferredLoadTearoffs();
-      finishAllConstructors();
+      List<SourceClassBuilder> myClasses = collectMyClasses();
+      finishAllConstructors(myClasses);
       loader.finishNativeMethods();
       loader.finishPatchMethods();
       runBuildTransformations();
@@ -302,6 +291,7 @@ class KernelTarget extends TargetImplementation {
       }
       handleRecoverableErrors(loader.unhandledErrors);
     } on deprecated_InputError catch (e) {
+      ticker.logMs("Got deprecated_InputError");
       handleInputError(e, isFullProgram: true);
     } catch (e, s) {
       return reportCrash(e, s, loader?.currentUriForCrashReporting);
@@ -352,6 +342,7 @@ class KernelTarget extends TargetImplementation {
           (LocatedMessage message) => new ExpressionStatement(new Throw(
               new StringLiteral(context.format(message, Severity.error)))))));
     }
+    loader.libraries.add(library.library);
     library.build(loader.coreLibrary);
     return link(<Library>[library.library]);
   }
@@ -359,16 +350,11 @@ class KernelTarget extends TargetImplementation {
   /// Creates a program by combining [libraries] with the libraries of
   /// `dillTarget.loader.program`.
   Program link(List<Library> libraries, {CanonicalName nameRoot}) {
-    Map<String, Source> uriToSource =
-        new Map<String, Source>.from(this.uriToSource);
+    Map<Uri, Source> uriToSource = new Map<Uri, Source>.from(this.uriToSource);
 
     libraries.addAll(dillTarget.loader.libraries);
     uriToSource.addAll(dillTarget.loader.uriToSource);
 
-    // TODO(ahe): Remove this line. Kernel seems to generate a default line map
-    // that used when there's no fileUri on an element. Instead, ensure all
-    // elements have a fileUri.
-    uriToSource[""] = new Source(<int>[0], const <int>[]);
     Program program = new Program(
         nameRoot: nameRoot, libraries: libraries, uriToSource: uriToSource);
     if (loader.first != null) {
@@ -386,19 +372,25 @@ class KernelTarget extends TargetImplementation {
   void installDefaultSupertypes() {
     Class objectClass = this.objectClass;
     loader.builders.forEach((Uri uri, LibraryBuilder library) {
-      library.forEach((String name, Builder builder) {
-        if (builder is SourceClassBuilder) {
-          Class cls = builder.target;
-          if (cls != objectClass) {
-            cls.supertype ??= objectClass.asRawSupertype;
-            builder.supertype ??= new KernelNamedTypeBuilder("Object", null)
-              ..bind(objectClassBuilder);
+      if (library.loader == loader) {
+        library.forEach((String name, Builder builder) {
+          while (builder != null) {
+            if (builder is SourceClassBuilder) {
+              Class cls = builder.target;
+              if (cls != objectClass) {
+                cls.supertype ??= objectClass.asRawSupertype;
+                builder.supertype ??= new KernelNamedTypeBuilder("Object", null)
+                  ..bind(objectClassBuilder);
+              }
+              if (builder.isMixinApplication) {
+                cls.mixedInType = builder.mixedInType.buildSupertype(
+                    library, builder.charOffset, builder.fileUri);
+              }
+            }
+            builder = builder.next;
           }
-          if (builder.isMixinApplication) {
-            cls.mixedInType = builder.mixedInType.buildSupertype(library);
-          }
-        }
-      });
+        });
+      }
     });
     ticker.logMs("Installed Object as implicit superclass");
   }
@@ -519,19 +511,56 @@ class KernelTarget extends TargetImplementation {
     SuperInitializer initializer = new SuperInitializer(
         constructor, new Arguments(positional, named: named));
     return new Constructor(function,
-        name: constructor.name, initializers: <Initializer>[initializer]);
+        name: constructor.name,
+        initializers: <Initializer>[initializer],
+        isSynthetic: true);
   }
 
   Constructor makeDefaultConstructor() {
     return new Constructor(
         new FunctionNode(new EmptyStatement(), returnType: const VoidType()),
         name: new Name(""),
-        isSyntheticDefault: true);
+        isSynthetic: true);
   }
 
-  void finishAllConstructors() {
+  void computeCoreTypes() {
+    List<Library> libraries = <Library>[];
+    for (String platformLibrary in const [
+      "dart:_internal",
+      "dart:async",
+      "dart:core",
+      "dart:mirrors"
+    ]) {
+      Uri uri = Uri.parse(platformLibrary);
+      LibraryBuilder library = loader.builders[uri];
+      if (library == null) {
+        // TODO(ahe): This is working around a bug in kernel_driver_test or
+        // kernel_driver.
+        bool found = false;
+        for (Library target in dillTarget.loader.libraries) {
+          if (target.importUri == uri) {
+            libraries.add(target);
+            found = true;
+            break;
+          }
+        }
+        if (!found && uri.path != "mirrors") {
+          // dart:mirrors is optional.
+          throw "Can't find $uri";
+        }
+      } else {
+        libraries.add(library.target);
+      }
+    }
+    Program plaformLibraries = new Program();
+    // Add libraries directly to prevent that their parents are changed.
+    plaformLibraries.libraries.addAll(libraries);
+    loader.computeCoreTypes(plaformLibraries);
+  }
+
+  void finishAllConstructors(List<SourceClassBuilder> builders) {
     Class objectClass = this.objectClass;
-    for (SourceClassBuilder builder in collectAllSourceClasses()) {
+    for (SourceClassBuilder builder in builders) {
       Class cls = builder.target;
       if (cls != objectClass) {
         finishConstructors(builder);
@@ -645,13 +674,11 @@ class KernelTarget extends TargetImplementation {
     });
   }
 
-  /// Run all transformations that are needed when building a program for the
-  /// first time.
+  /// Run all transformations that are needed when building a bundle of
+  /// libraries for the first time.
   void runBuildTransformations() {
     backendTarget.performModularTransformationsOnLibraries(
         loader.coreTypes, loader.hierarchy, loader.libraries,
-        logger: (String msg) => ticker.logMs(msg));
-    backendTarget.performGlobalTransformations(loader.coreTypes, program,
         logger: (String msg) => ticker.logMs(msg));
   }
 

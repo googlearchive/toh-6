@@ -18,7 +18,7 @@ class ListRange extends IterableBase<int> {
   final int _offset;
   final int _length;
 
-  ListRange(List<int> source, [offset = 0, length])
+  ListRange(List<int> source, [int offset = 0, int length])
       : this._source = source,
         this._offset = offset,
         this._length = (length == null ? source.length - offset : length) {

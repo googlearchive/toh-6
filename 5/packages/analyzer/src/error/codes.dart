@@ -326,6 +326,23 @@ class CompileTimeErrorCode extends ErrorCode {
           "Try choosing a different name for the type parameter.");
 
   /**
+   * 16.33 Identifier Reference: It is a compile-time error if a built-in
+   * identifier is used as the declared name of a prefix, class, type parameter
+   * or type alias.
+   *
+   * Parameters:
+   * 0: the built-in identifier that is being used
+   *
+   * TODO(scheglov) It would be nice to get more specific errors.
+   * https://github.com/dart-lang/sdk/issues/31811
+   */
+  static const CompileTimeErrorCode BUILT_IN_IDENTIFIER_IN_DECLARATION =
+      const CompileTimeErrorCode(
+          'BUILT_IN_IDENTIFIER_IN_DECLARATION',
+          "The built-in identifier '{0}' can't be used as a name.",
+          "Try choosing a different name.");
+
+  /**
    * 13.9 Switch: It is a compile-time error if the class <i>C</i> implements
    * the operator <i>==</i>.
    *
@@ -949,7 +966,10 @@ class CompileTimeErrorCode extends ErrorCode {
    * Parameters:
    * 0: the name of the type that cannot be extended
    *
-   * See [IMPLEMENTS_DISALLOWED_CLASS].
+   * See [IMPLEMENTS_DISALLOWED_CLASS] and [MIXIN_OF_DISALLOWED_CLASS].
+   *
+   * TODO(scheglov) We might want to restore specific code with FrontEnd.
+   * https://github.com/dart-lang/sdk/issues/31821
    */
   static const CompileTimeErrorCode EXTENDS_DISALLOWED_CLASS =
       const CompileTimeErrorCode(
@@ -1386,6 +1406,13 @@ class CompileTimeErrorCode extends ErrorCode {
           'INSTANTIATE_ENUM',
           "Enums can't be instantiated.",
           "Try using one of the defined constants.");
+
+  static const CompileTimeErrorCode INTEGER_LITERAL_OUT_OF_RANGE =
+      const CompileTimeErrorCode(
+          'INTEGER_LITERAL_OUT_OF_RANGE',
+          "The integer literal {0} can't be represented in 64 bits.",
+          "Try using the BigInt class if you need an integer larger than "
+          "9,223,372,036,854,775,807 or less than -9,223,372,036,854,775,808.");
 
   /**
    * 15 Metadata: Metadata consists of a series of annotations, each of which
@@ -2865,6 +2892,19 @@ class StaticTypeWarningCode extends ErrorCode {
           "The return type '{0}' isn't a '{1}', as defined by the method '{2}'.");
 
   /**
+   * 13.11 Return: It is a static type warning if the type of <i>e</i> may not
+   * be assigned to the declared return type of the immediately enclosing
+   * function.
+   *
+   * Parameters:
+   * 0: the return type as declared in the return statement
+   * 1: the expected return type as defined by the method
+   */
+  static const StaticTypeWarningCode RETURN_OF_INVALID_TYPE_FROM_CLOSURE =
+      const StaticTypeWarningCode('RETURN_OF_INVALID_TYPE_FROM_CLOSURE',
+          "The return type '{0}' isn't a '{1}', as defined by anonymous closure.");
+
+  /**
    * 12.11 Instance Creation: It is a static type warning if any of the type
    * arguments to a constructor of a generic type <i>G</i> invoked by a new
    * expression or a constant object expression are not subtypes of the bounds
@@ -3325,6 +3365,17 @@ class StaticWarningCode extends ErrorCode {
    * a NoSuchMethodError to be thrown, because no setter is defined for it. The
    * assignment will also give rise to a static warning for the same reason.
    */
+  static const StaticWarningCode ASSIGNMENT_TO_FINAL_LOCAL =
+      const StaticWarningCode(
+          'ASSIGNMENT_TO_FINAL_LOCAL',
+          "'{0}', a final variable, can only be set once.",
+          "Try making '{0}' non-final.");
+
+  /**
+   * 5 Variables: Attempting to assign to a final variable elsewhere will cause
+   * a NoSuchMethodError to be thrown, because no setter is defined for it. The
+   * assignment will also give rise to a static warning for the same reason.
+   */
   static const StaticWarningCode ASSIGNMENT_TO_FINAL_NO_SETTER =
       const StaticWarningCode(
           'ASSIGNMENT_TO_FINAL_NO_SETTER',
@@ -3757,22 +3808,6 @@ class StaticWarningCode extends ErrorCode {
           "'{0}' is inherited as a getter and also a method.",
           "Try adjusting the supertypes of this class to remove the "
           "inconsistency.");
-
-  /**
-   * 7.1 Instance Methods: It is a static warning if a class <i>C</i> declares
-   * an instance method named <i>n</i> and an accessible static member named
-   * <i>n</i> is declared in a superclass of <i>C</i>.
-   *
-   * Parameters:
-   * 0: the name of the member with the name conflict
-   * 1: the name of the enclosing class that has the static member
-   */
-  static const StaticWarningCode
-      INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC =
-      const StaticWarningCode(
-          'INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC',
-          "'{0}' collides with a static member in the superclass '{1}'.",
-          "Try renaming either the method or the inherited member.");
 
   /**
    * 7.2 Getters: It is a static warning if a getter <i>m1</i> overrides a
@@ -4523,19 +4558,6 @@ class StaticWarningCode extends ErrorCode {
           "changing the import to not be deferred.");
 
   /**
-   * Not yet spec'd.
-   *
-   * Parameters:
-   * 0: the name of the generic function's type parameter that is being used in
-   *    an `is` expression
-   */
-  static const StaticWarningCode TYPE_ANNOTATION_GENERIC_FUNCTION_PARAMETER =
-      const StaticWarningCode(
-          'TYPE_ANNOTATION_GENERIC_FUNCTION_PARAMETER',
-          "The type parameter '{0}' can't be used in a type test.",
-          "Try using a different type.");
-
-  /**
    * 12.31 Type Test: It is a static warning if <i>T</i> does not denote a type
    * available in the current lexical scope.
    */
@@ -5021,10 +5043,18 @@ class StrongModeCode extends ErrorCode {
       "Try adding an explicit type to either the variable '{0}' or the variable '{1}'.");
 
   static const StrongModeCode TOP_LEVEL_INSTANCE_GETTER = const StrongModeCode(
-      ErrorType.HINT,
+      ErrorType.STATIC_WARNING,
       'TOP_LEVEL_INSTANCE_GETTER',
-      "The type of '{0}' can't be inferred because of the use of the instance getter '{1}'.",
-      "Try removing the use of the instance getter {1}, or add an explicit type for '{0}'.");
+      "The type of '{0}' can't be inferred because it refers to an instance "
+      "getter, '{1}', which has an implicit type.",
+      "Add an explicit type for either '{0}' or '{1}'.");
+
+  static const StrongModeCode TOP_LEVEL_INSTANCE_METHOD = const StrongModeCode(
+      ErrorType.STATIC_WARNING,
+      'TOP_LEVEL_INSTANCE_METHOD',
+      "The type of '{0}' can't be inferred because it refers to an instance "
+      "method, '{1}', which has an implicit type.",
+      "Add an explicit type for either '{0}' or '{1}'.");
 
   static const StrongModeCode TOP_LEVEL_TYPE_ARGUMENTS = const StrongModeCode(
       ErrorType.HINT,
@@ -5038,11 +5068,18 @@ class StrongModeCode extends ErrorCode {
       "The type of '{0}' can't be inferred because {1} expressions aren't supported.",
       "Try adding an explicit type for '{0}'.");
 
-  static const StrongModeCode UNSAFE_BLOCK_CLOSURE_INFERENCE = const StrongModeCode(
-      ErrorType.STATIC_WARNING,
-      'UNSAFE_BLOCK_CLOSURE_INFERENCE',
-      "Unsafe use of a block closure in a type-inferred variable outside a function body.",
-      "Try adding a type annotation for '{0}'. See dartbug.com/26947.");
+  /**
+   * This warning is generated when a function type is assigned to a function
+   * typed location, and the assignment will be invalid after fuzzy arrows
+   * (the treatment of dynamic as bottom in certain locations) is removed.
+   *
+   */
+  static const StrongModeCode USES_DYNAMIC_AS_BOTTOM = const StrongModeCode(
+      ErrorType.STATIC_TYPE_WARNING,
+      'USES_DYNAMIC_AS_BOTTOM',
+      "A function of type '{0}' can't be assigned to a location of type '{1}'.",
+      "Try changing the parameter types of the function or of the "
+      " receiving location.");
 
   @override
   final ErrorType type;

@@ -6,7 +6,11 @@ library fasta.codes;
 
 import 'package:kernel/ast.dart' show DartType;
 
+import 'package:kernel/text/ast_to_text.dart' show NameSystem, Printer;
+
 import '../scanner/token.dart' show Token;
+
+import 'severity.dart' show Severity;
 
 import 'util/relativize.dart' as util show relativizeUri;
 
@@ -21,7 +25,10 @@ class Code<T> {
 
   final String dart2jsCode;
 
-  const Code(this.name, this.template, {this.analyzerCode, this.dart2jsCode});
+  final Severity severity;
+
+  const Code(this.name, this.template,
+      {this.analyzerCode, this.dart2jsCode, this.severity});
 
   String toString() => name;
 }
@@ -48,8 +55,15 @@ class MessageCode extends Code<Null> implements Message {
   final String tip;
 
   const MessageCode(String name,
-      {String analyzerCode, String dart2jsCode, this.message, this.tip})
-      : super(name, null, analyzerCode: analyzerCode, dart2jsCode: dart2jsCode);
+      {String analyzerCode,
+      String dart2jsCode,
+      Severity severity,
+      this.message,
+      this.tip})
+      : super(name, null,
+            analyzerCode: analyzerCode,
+            dart2jsCode: dart2jsCode,
+            severity: severity);
 
   Map<String, dynamic> get arguments => const <String, dynamic>{};
 
@@ -70,7 +84,7 @@ class Template<T> {
   const Template({this.messageTemplate, this.tipTemplate, this.withArguments});
 }
 
-class LocatedMessage {
+class LocatedMessage implements Comparable<LocatedMessage> {
   final Uri uri;
 
   final int charOffset;
@@ -86,6 +100,14 @@ class LocatedMessage {
   String get tip => messageObject.tip;
 
   Map<String, dynamic> get arguments => messageObject.arguments;
+
+  int compareTo(LocatedMessage other) {
+    int result = "${uri}".compareTo("${other.uri}");
+    if (result != 0) return result;
+    result = charOffset.compareTo(other.charOffset);
+    if (result != 0) return result;
+    return message.compareTo(message);
+  }
 }
 
 String relativizeUri(Uri uri) {
@@ -97,3 +119,6 @@ String relativizeUri(Uri uri) {
   // 2. We can change `base` argument here if needed.
   return util.relativizeUri(uri, base: Uri.base);
 }
+
+typedef Message SummaryTemplate(
+    int count, int count2, String string, String string2, String string3);

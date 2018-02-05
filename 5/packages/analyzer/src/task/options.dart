@@ -48,6 +48,7 @@ class AnalyzerOptions {
       'enableInitializingFormalAccess';
   static const String enableStrictCallChecks = 'enableStrictCallChecks';
   static const String enableSuperMixins = 'enableSuperMixins';
+  static const String enablePreviewDart2 = 'enablePreviewDart2';
 
   static const String errors = 'errors';
   static const String exclude = 'exclude';
@@ -88,7 +89,8 @@ class AnalyzerOptions {
     enableAsync,
     enableGenericMethods,
     enableStrictCallChecks,
-    enableSuperMixins
+    enableSuperMixins,
+    enablePreviewDart2
   ];
 }
 
@@ -281,7 +283,7 @@ class GenerateOptionsErrorsTask extends SourceBasedAnalysisTask {
       initialIncludeSpan ??= span;
       String includeUri = span.text;
       Source includedSource = sourceFactory.resolveUri(source, includeUri);
-      if (!includedSource.exists()) {
+      if (includedSource == null || !includedSource.exists()) {
         errors.add(new AnalysisError(
             initialSource,
             initialIncludeSpan.start.column + 1,
@@ -578,6 +580,8 @@ class _OptionsProcessor {
         options.enableStrictCallChecks = boolValue;
       } else if (feature == AnalyzerOptions.enableSuperMixins) {
         options.enableSuperMixins = boolValue;
+      } else if (feature == AnalyzerOptions.enablePreviewDart2) {
+        options.previewDart2 = boolValue;
       }
     }
   }

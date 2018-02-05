@@ -223,6 +223,7 @@ class ApiElementBuilder extends _BaseElementBuilder {
       constantName.staticElement = constantField;
     }
     enumElement.fields = fields;
+    enumElement.createToStringMethodElement();
 
     _currentHolder.addEnum(enumElement);
     enumName.staticElement = enumElement;
@@ -1159,6 +1160,10 @@ class LocalElementBuilder extends _BaseElementBuilder {
     element.isFinal = node.isFinal;
     if (node.type == null) {
       element.hasImplicitType = true;
+    } else {
+      // Note: this is a noop most of the time, however, not for
+      // [GenericFunctionType] and perhaps others in the future.
+      node.type.accept(this);
     }
     _currentHolder.addLocalVariable(element);
     variableName.staticElement = element;

@@ -63,6 +63,11 @@ abstract class AbstractClassElementImpl extends ElementImpl
   List<FieldElement> _fields;
 
   /**
+   * A list containing all of the methods contained in this class.
+   */
+  List<MethodElement> _methods;
+
+  /**
    * Initialize a newly created class element to have the given [name] at the
    * given [offset] in the file that contains the declaration of this element.
    */
@@ -175,6 +180,18 @@ abstract class AbstractClassElementImpl extends ElementImpl
       PropertyAccessorElement accessor = accessors[i];
       if (accessor.isGetter && accessor.name == getterName) {
         return accessor;
+      }
+    }
+    return null;
+  }
+
+  @override
+  MethodElement getMethod(String methodName) {
+    int length = methods.length;
+    for (int i = 0; i < length; i++) {
+      MethodElement method = methods[i];
+      if (method.name == methodName) {
+        return method;
       }
     }
     return null;
@@ -472,11 +489,6 @@ class ClassElementImpl extends AbstractClassElementImpl
   List<ConstructorElement> _constructors;
 
   /**
-   * A list containing all of the methods contained in this class.
-   */
-  List<MethodElement> _methods;
-
-  /**
    * A flag indicating whether the types associated with the instance members of
    * this class have been inferred.
    */
@@ -740,13 +752,15 @@ class ClassElementImpl extends AbstractClassElementImpl
   }
 
   /**
-   * Return `true` if the class has a `noSuchMethod()` method distinct from the
-   * one declared in class `Object`, as per the Dart Language Specification
-   * (section 10.4).
+   * Return `true` if the class has a concrete `noSuchMethod()` method distinct
+   * from the one declared in class `Object`, as per the Dart Language
+   * Specification (section 10.4).
    */
   bool get hasNoSuchMethod {
-    MethodElement method =
-        lookUpMethod(FunctionElement.NO_SUCH_METHOD_METHOD_NAME, library);
+    MethodElement method = context.analysisOptions.strongMode
+        ? lookUpConcreteMethod(
+            FunctionElement.NO_SUCH_METHOD_METHOD_NAME, library)
+        : lookUpMethod(FunctionElement.NO_SUCH_METHOD_METHOD_NAME, library);
     ClassElement definingClass = method?.enclosingElement;
     return definingClass != null && !definingClass.type.isObject;
   }
@@ -1110,18 +1124,6 @@ class ClassElementImpl extends AbstractClassElementImpl
       TypeParameterElementImpl typeParameterImpl = typeParameter;
       if (typeParameterImpl.identifier == identifier) {
         return typeParameterImpl;
-      }
-    }
-    return null;
-  }
-
-  @override
-  MethodElement getMethod(String methodName) {
-    int length = methods.length;
-    for (int i = 0; i < length; i++) {
-      MethodElement method = methods[i];
-      if (method.name == methodName) {
-        return method;
       }
     }
     return null;
@@ -2250,7 +2252,7 @@ class ConstructorElementImpl extends ExecutableElementImpl
   ConstructorElementImpl.forKernel(ClassElementImpl enclosingClass,
       this._kernelConstructor, this._kernelFactory)
       : super.forKernel(enclosingClass, _kernelConstructor ?? _kernelFactory) {
-    isSynthetic = _kernelConstructor?.isSyntheticDefault ?? false;
+    isSynthetic = _kernelConstructor?.isSynthetic ?? false;
   }
 
   /**
@@ -2790,6 +2792,12 @@ class DynamicElementImpl extends ElementImpl implements TypeDefiningElement {
  */
 class ElementAnnotationImpl implements ElementAnnotation {
   /**
+   * The name of the top-level variable used to mark that a function always
+   * throws, for dead code purposes.
+   */
+  static String _ALWAYS_THROWS_VARIABLE_NAME = "alwaysThrows";
+
+  /**
    * The name of the top-level variable used to mark a method parameter as
    * covariant.
    */
@@ -2868,6 +2876,10 @@ class ElementAnnotationImpl implements ElementAnnotation {
    */
   static String _REQUIRED_VARIABLE_NAME = "required";
 
+  /// The name of the top-level variable used to mark a method as being
+  /// visible for testing.
+  static String _VISIBLE_FOR_TESTING_VARIABLE_NAME = "visibleForTesting";
+
   /**
    * The element representing the field, variable, or constructor being used as
    * an annotation.
@@ -2903,6 +2915,12 @@ class ElementAnnotationImpl implements ElementAnnotation {
 
   @override
   AnalysisContext get context => compilationUnit.library.context;
+
+  @override
+  bool get isAlwaysThrows =>
+      element is PropertyAccessorElement &&
+      element.name == _ALWAYS_THROWS_VARIABLE_NAME &&
+      element.library?.name == _META_LIB_NAME;
 
   /**
    * Return `true` if this annotation marks the associated parameter as being
@@ -2975,6 +2993,12 @@ class ElementAnnotationImpl implements ElementAnnotation {
       element is PropertyAccessorElement &&
           element.name == _REQUIRED_VARIABLE_NAME &&
           element.library?.name == _META_LIB_NAME;
+
+  @override
+  bool get isVisibleForTesting =>
+      element is PropertyAccessorElement &&
+      element.name == _VISIBLE_FOR_TESTING_VARIABLE_NAME &&
+      element.library?.name == _META_LIB_NAME;
 
   /**
    * Get the library containing this annotation.
@@ -3157,6 +3181,10 @@ abstract class ElementImpl implements Element {
   String get identifier => name;
 
   @override
+  bool get isAlwaysThrows =>
+      metadata.any((ElementAnnotation annotation) => annotation.isAlwaysThrows);
+
+  @override
   bool get isDeprecated {
     for (ElementAnnotation annotation in metadata) {
       if (annotation.isDeprecated) {
@@ -3242,6 +3270,10 @@ abstract class ElementImpl implements Element {
   void set isSynthetic(bool isSynthetic) {
     setModifier(Modifier.SYNTHETIC, isSynthetic);
   }
+
+  @override
+  bool get isVisibleForTesting => metadata
+      .any((ElementAnnotation annotation) => annotation.isVisibleForTesting);
 
   @override
   LibraryElement get library =>
@@ -3747,7 +3779,7 @@ class EnumElementImpl extends AbstractClassElementImpl {
   List<PropertyAccessorElement> get accessors {
     if (_accessors == null) {
       if (_kernel != null || _unlinkedEnum != null) {
-        _resynthesizeFieldsAndPropertyAccessors();
+        _resynthesizeMembers();
       }
     }
     return _accessors ?? const <PropertyAccessorElement>[];
@@ -3803,7 +3835,7 @@ class EnumElementImpl extends AbstractClassElementImpl {
   List<FieldElement> get fields {
     if (_fields == null) {
       if (_kernel != null || _unlinkedEnum != null) {
-        _resynthesizeFieldsAndPropertyAccessors();
+        _resynthesizeMembers();
       }
     }
     return _fields ?? const <FieldElement>[];
@@ -3859,7 +3891,14 @@ class EnumElementImpl extends AbstractClassElementImpl {
   }
 
   @override
-  List<MethodElement> get methods => const <MethodElement>[];
+  List<MethodElement> get methods {
+    if (_methods == null) {
+      if (_kernel != null || _unlinkedEnum != null) {
+        _resynthesizeMembers();
+      }
+    }
+    return _methods ?? const <MethodElement>[];
+  }
 
   @override
   List<InterfaceType> get mixins => const <InterfaceType>[];
@@ -3915,8 +3954,18 @@ class EnumElementImpl extends AbstractClassElementImpl {
     }
   }
 
-  @override
-  MethodElement getMethod(String name) => null;
+  /**
+   * Create the only method enums have - `toString()`.
+   */
+  void createToStringMethodElement() {
+    var method = new MethodElementImpl('toString', -1);
+    if (_kernel != null || _unlinkedEnum != null) {
+      method.returnType = context.typeProvider.stringType;
+      method.type = new FunctionTypeImpl(method);
+    }
+    method.enclosingElement = this;
+    _methods = <MethodElement>[method];
+  }
 
   @override
   ConstructorElement getNamedConstructor(String name) => null;
@@ -3924,7 +3973,7 @@ class EnumElementImpl extends AbstractClassElementImpl {
   @override
   bool isSuperConstructorAccessible(ConstructorElement constructor) => false;
 
-  void _resynthesizeFieldsAndPropertyAccessors() {
+  void _resynthesizeMembers() {
     List<FieldElementImpl> fields = <FieldElementImpl>[];
     // Build the 'index' field.
     fields.add(new FieldElementImpl('index', -1)
@@ -3963,6 +4012,7 @@ class EnumElementImpl extends AbstractClassElementImpl {
             new PropertyAccessorElementImpl_ImplicitGetter(field)
               ..enclosingElement = this)
         .toList(growable: false);
+    createToStringMethodElement();
   }
 }
 
@@ -5341,11 +5391,8 @@ class GenericTypeAliasElementImpl extends ElementImpl
   GenericFunctionTypeElementImpl get function {
     if (_function == null) {
       if (_kernel != null) {
-        var context = enclosingUnit._kernelContext;
-        var type = context.getType(this, _kernel.type);
-        if (type is FunctionType) {
-          _function = type.element;
-        }
+        _function =
+            new GenericFunctionTypeElementImpl.forKernel(this, _kernel.type);
       }
       if (_unlinkedTypedef != null) {
         if (_unlinkedTypedef.style == TypedefStyle.genericFunctionType) {
@@ -7416,6 +7463,9 @@ class MultiplyDefinedElementImpl implements MultiplyDefinedElement {
   Element get enclosingElement => null;
 
   @override
+  bool get isAlwaysThrows => false;
+
+  @override
   bool get isDeprecated => false;
 
   @override
@@ -7447,6 +7497,9 @@ class MultiplyDefinedElementImpl implements MultiplyDefinedElement {
 
   @override
   bool get isSynthetic => true;
+
+  @override
+  bool get isVisibleForTesting => false;
 
   @override
   ElementKind get kind => ElementKind.ERROR;
@@ -8570,11 +8623,11 @@ class PrefixElementImpl extends ElementImpl implements PrefixElement {
 
   @override
   String get name {
-    if (_kernel != null) {
-      return _kernel.name;
-    }
-    if (_unlinkedImport != null) {
-      if (_name == null) {
+    if (_name == null) {
+      if (_kernel != null) {
+        return _name = _kernel.name;
+      }
+      if (_unlinkedImport != null) {
         LibraryElementImpl library = enclosingElement as LibraryElementImpl;
         int prefixId = _unlinkedImport.prefixReference;
         return _name = library._unlinkedDefiningUnit.references[prefixId].name;

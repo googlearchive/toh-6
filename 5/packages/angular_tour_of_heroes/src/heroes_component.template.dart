@@ -210,7 +210,7 @@ class _ViewHeroesComponent2 extends AppView<import2.HeroesComponent> {
   import3.DivElement _el_0;
   import3.Element _el_1;
   import3.Text _text_2;
-  import3.ButtonElement _el_3;
+  import3.ButtonElement _el_4;
   var _expr_0;
   String Function(String) _pipe_uppercase_0_0;
   _ViewHeroesComponent2(AppView<dynamic> parentView, num parentIndex) : super(import9.ViewType.EMBEDDED, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
@@ -225,11 +225,13 @@ class _ViewHeroesComponent2 extends AppView<import2.HeroesComponent> {
     addShimE(_el_1);
     _text_2 = new import3.Text('');
     _el_1.append(_text_2);
-    _el_3 = createAndAppend(doc, 'button', _el_0);
-    addShimC(_el_3);
-    import3.Text _text_4 = new import3.Text('View Details');
-    _el_3.append(_text_4);
-    _el_3.addEventListener('click', eventHandler0(ctx.gotoDetail));
+    import3.Text _text_3 = new import3.Text(' is my hero');
+    _el_1.append(_text_3);
+    _el_4 = createAndAppend(doc, 'button', _el_0);
+    addShimC(_el_4);
+    import3.Text _text_5 = new import3.Text('View Details');
+    _el_4.append(_text_5);
+    _el_4.addEventListener('click', eventHandler0(ctx.gotoDetail));
     _pipe_uppercase_0_0 = import11.pureProxy1((parentView as ViewHeroesComponent0)._pipe_uppercase_0.transform);
     init0(_el_0);
     return null;
@@ -238,7 +240,7 @@ class _ViewHeroesComponent2 extends AppView<import2.HeroesComponent> {
   @override
   void detectChangesInternal() {
     final import2.HeroesComponent _ctx = ctx;
-    final currVal_0 = import11.interpolate1('', _pipe_uppercase_0_0(_ctx.selectedHero.name), ' is my hero');
+    final currVal_0 = import11.interpolate0(_pipe_uppercase_0_0(_ctx.selectedHero.name));
     if (!identical(_expr_0, currVal_0)) {
       _text_2.text = currVal_0;
       _expr_0 = currVal_0;

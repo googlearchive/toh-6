@@ -147,7 +147,7 @@ class IterableUtf8Decoder extends IterableBase<int> {
 
   IterableUtf8Decoder(this.bytes,
       [this.offset = 0,
-      this.length = null,
+      this.length,
       this.replacementCodepoint = UNICODE_REPLACEMENT_CHARACTER_CODEPOINT]);
 
   Utf8Decoder get iterator =>
@@ -166,7 +166,7 @@ class Utf8Decoder implements Iterator<int> {
   // TODO(kevmoo): should this field be private?
   final ListRangeIterator utf8EncodedBytesIterator;
   final int replacementCodepoint;
-  int _current = null;
+  int _current;
 
   Utf8Decoder(List<int> utf8EncodedBytes,
       [int offset = 0,

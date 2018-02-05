@@ -3,6 +3,9 @@
 // BSD-style license that can be found in the LICENSE file.
 library kernel.ast.visitor;
 
+// ignore: UNDEFINED_HIDDEN_NAME
+import 'dart:core' hide MapEntry;
+
 import 'ast.dart';
 
 abstract class ExpressionVisitor<R> {
@@ -54,6 +57,7 @@ abstract class ExpressionVisitor<R> {
   R visitBoolLiteral(BoolLiteral node) => defaultBasicLiteral(node);
   R visitNullLiteral(NullLiteral node) => defaultBasicLiteral(node);
   R visitLet(Let node) => defaultExpression(node);
+  R visitInstantiation(Instantiation node) => defaultExpression(node);
   R visitLoadLibrary(LoadLibrary node) => defaultExpression(node);
   R visitCheckLibraryIsLoaded(CheckLibraryIsLoaded node) =>
       defaultExpression(node);
@@ -69,7 +73,6 @@ abstract class StatementVisitor<R> {
 
   R defaultStatement(Statement node) => null;
 
-  R visitInvalidStatement(InvalidStatement node) => defaultStatement(node);
   R visitExpressionStatement(ExpressionStatement node) =>
       defaultStatement(node);
   R visitBlock(Block node) => defaultStatement(node);
@@ -120,6 +123,7 @@ abstract class InitializerVisitor<R> {
   R visitRedirectingInitializer(RedirectingInitializer node) =>
       defaultInitializer(node);
   R visitLocalInitializer(LocalInitializer node) => defaultInitializer(node);
+  R visitAssertInitializer(AssertInitializer node) => defaultInitializer(node);
 }
 
 class TreeVisitor<R>
@@ -178,6 +182,7 @@ class TreeVisitor<R>
   R visitBoolLiteral(BoolLiteral node) => defaultBasicLiteral(node);
   R visitNullLiteral(NullLiteral node) => defaultBasicLiteral(node);
   R visitLet(Let node) => defaultExpression(node);
+  R visitInstantiation(Instantiation node) => defaultExpression(node);
   R visitLoadLibrary(LoadLibrary node) => defaultExpression(node);
   R visitCheckLibraryIsLoaded(CheckLibraryIsLoaded node) =>
       defaultExpression(node);
@@ -189,7 +194,6 @@ class TreeVisitor<R>
 
   // Statements
   R defaultStatement(Statement node) => defaultTreeNode(node);
-  R visitInvalidStatement(InvalidStatement node) => defaultStatement(node);
   R visitExpressionStatement(ExpressionStatement node) =>
       defaultStatement(node);
   R visitBlock(Block node) => defaultStatement(node);
@@ -235,6 +239,7 @@ class TreeVisitor<R>
   R visitRedirectingInitializer(RedirectingInitializer node) =>
       defaultInitializer(node);
   R visitLocalInitializer(LocalInitializer node) => defaultInitializer(node);
+  R visitAssertInitializer(AssertInitializer node) => defaultInitializer(node);
 
   // Other tree nodes
   R visitLibrary(Library node) => defaultTreeNode(node);
@@ -488,6 +493,8 @@ abstract class ExpressionVisitor1<R, T> {
   R visitBoolLiteral(BoolLiteral node, T arg) => defaultBasicLiteral(node, arg);
   R visitNullLiteral(NullLiteral node, T arg) => defaultBasicLiteral(node, arg);
   R visitLet(Let node, T arg) => defaultExpression(node, arg);
+  R visitInstantiation(Instantiation node, T arg) =>
+      defaultExpression(node, arg);
   R visitLoadLibrary(LoadLibrary node, T arg) => defaultExpression(node, arg);
   R visitCheckLibraryIsLoaded(CheckLibraryIsLoaded node, T arg) =>
       defaultExpression(node, arg);
@@ -505,8 +512,6 @@ abstract class StatementVisitor1<R, T> {
 
   R defaultStatement(Statement node, T arg) => null;
 
-  R visitInvalidStatement(InvalidStatement node, T arg) =>
-      defaultStatement(node, arg);
   R visitExpressionStatement(ExpressionStatement node, T arg) =>
       defaultStatement(node, arg);
   R visitBlock(Block node, T arg) => defaultStatement(node, arg);

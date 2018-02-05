@@ -4,8 +4,6 @@
 
 library code_transformers.src.dart_sdk;
 
-import 'dart:io' show Directory;
-
 import 'package:analyzer/file_system/file_system.dart';
 import 'package:analyzer/src/context/context.dart';
 import 'package:analyzer/src/dart/sdk/sdk.dart';
@@ -20,10 +18,7 @@ import 'package:cli_util/cli_util.dart' as cli_util;
 /// This will return null if the SDK cannot be found
 ///
 /// Note that this may not be correct when executing outside of `pub`.
-String get dartSdkDirectory {
-  Directory sdkDir = cli_util.getSdkDir();
-  return sdkDir != null ? sdkDir.path : null;
-}
+String get dartSdkDirectory => cli_util.getSdkPath();
 
 /// Sources that are annotated with a source uri, so it is easy to resolve how
 /// to support `Resolver.getImportUri`.

@@ -17,18 +17,17 @@ class Utf16CodeUnitDecoder implements Iterator<int> {
   // TODO(kevmoo): should this field be private?
   final ListRangeIterator utf16CodeUnitIterator;
   final int replacementCodepoint;
-  int _current = null;
+  int _current;
 
   Utf16CodeUnitDecoder(List<int> utf16CodeUnits,
       [int offset = 0,
       int length,
-      int this.replacementCodepoint = UNICODE_REPLACEMENT_CHARACTER_CODEPOINT])
+      this.replacementCodepoint = UNICODE_REPLACEMENT_CHARACTER_CODEPOINT])
       : utf16CodeUnitIterator =
             (new ListRange(utf16CodeUnits, offset, length)).iterator;
 
   Utf16CodeUnitDecoder.fromListRangeIterator(
-      ListRangeIterator this.utf16CodeUnitIterator,
-      int this.replacementCodepoint);
+      this.utf16CodeUnitIterator, this.replacementCodepoint);
 
   Iterator<int> get iterator => this;
 

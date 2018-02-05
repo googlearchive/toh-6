@@ -46,7 +46,9 @@ UnlinkedUnitBuilder computeUnlinkedUnit(List<int> salt, List<int> content) {
       continue;
     }
     // The token is outside of a function body, add it.
-    apiSignature.addString(token.lexeme);
+    if (token is! ErrorToken) {
+      apiSignature.addString(token.lexeme);
+    }
   }
 
   return new UnlinkedUnitBuilder(
@@ -114,7 +116,7 @@ class _BodySkippingParser extends Parser {
       Token token, bool ofFunctionExpression, bool allowAbstract) {
     Token next = token.next;
     if (identical('{', next.lexeme)) {
-      Token close = skipBlock(next);
+      Token close = skipBlock(token);
       bodyRanges.add(new _BodyRange(next.charOffset, close.charOffset));
       return close;
     }

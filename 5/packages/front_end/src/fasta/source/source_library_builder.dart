@@ -8,8 +8,7 @@ import 'package:kernel/ast.dart' show ProcedureKind;
 
 import '../../base/resolve_relative_uri.dart' show resolveRelativeUri;
 
-import '../../base/instrumentation.dart'
-    show Instrumentation, InstrumentationValueLiteral;
+import '../../base/instrumentation.dart' show Instrumentation;
 
 import '../../scanner/token.dart' show Token;
 
@@ -31,7 +30,6 @@ import '../builder/builder.dart'
         TypeBuilder,
         TypeDeclarationBuilder,
         TypeVariableBuilder,
-        Unhandled,
         UnresolvedType;
 
 import '../combinator.dart' show Combinator;
@@ -42,9 +40,6 @@ import '../export.dart' show Export;
 
 import '../fasta_codes.dart'
     show
-        LocatedMessage,
-        Message,
-        codeTypeNotFound,
         messageExpectedUri,
         messagePartOfSelf,
         messageMemberWithSameNameAsClass,
@@ -61,6 +56,8 @@ import '../fasta_codes.dart'
         templatePartTwice;
 
 import '../import.dart' show Import;
+
+import '../configuration.dart' show Configuration;
 
 import '../problems.dart' show unhandled;
 
@@ -124,6 +121,7 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
 
   Uri get uri;
 
+  @override
   bool get isPart => partOfName != null || partOfUri != null;
 
   List<UnresolvedType<T>> get types => libraryDeclaration.types;
@@ -195,7 +193,7 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
   void addExport(
       List<MetadataBuilder> metadata,
       String uri,
-      Unhandled conditionalUris,
+      List<Configuration> conditionalUris,
       List<Combinator> combinators,
       int charOffset,
       int uriOffset) {
@@ -205,25 +203,58 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
     exports.add(new Export(this, exportedLibrary, combinators, charOffset));
   }
 
+  String _lookupImportCondition(String dottedName) {
+    const String prefix = "dart.library.";
+    if (!dottedName.startsWith(prefix)) return "";
+    dottedName = dottedName.substring(prefix.length);
+
+    LibraryBuilder coreLibrary =
+        loader.read(resolve(this.uri, "dart:core", -1), -1);
+    LibraryBuilder imported = coreLibrary
+        .loader.builders[new Uri(scheme: 'dart', path: dottedName)];
+    return imported != null ? "true" : "";
+  }
+
   void addImport(
       List<MetadataBuilder> metadata,
       String uri,
-      Unhandled conditionalUris,
+      List<Configuration> configurations,
       String prefix,
       List<Combinator> combinators,
       bool deferred,
       int charOffset,
       int prefixCharOffset,
       int uriOffset) {
-    imports.add(new Import(
-        this,
-        loader.read(resolve(this.uri, uri, uriOffset), charOffset,
-            accessor: this),
-        deferred,
-        prefix,
-        combinators,
-        charOffset,
-        prefixCharOffset));
+    if (configurations != null) {
+      for (Configuration config in configurations) {
+        if (_lookupImportCondition(config.dottedName) == config.condition) {
+          uri = config.importUri;
+          break;
+        }
+      }
+    }
+
+    const String nativeExtensionScheme = "dart-ext:";
+    bool isExternal = uri.startsWith(nativeExtensionScheme);
+    if (isExternal) {
+      uri = uri.substring(nativeExtensionScheme.length);
+      uriOffset += nativeExtensionScheme.length;
+    }
+
+    Uri resolvedUri = resolve(this.uri, uri, uriOffset);
+
+    LibraryBuilder builder = null;
+    if (isExternal) {
+      if (resolvedUri.scheme == "package") {
+        resolvedUri = loader.target.translateUri(resolvedUri);
+      }
+    } else {
+      builder = loader.read(resolvedUri, charOffset, accessor: this);
+    }
+
+    imports.add(new Import(this, builder, deferred, prefix, combinators,
+        configurations, charOffset, prefixCharOffset,
+        nativeImportUri: builder == null ? resolvedUri : null));
   }
 
   void addPart(List<MetadataBuilder> metadata, String uri, int charOffset) {
@@ -503,7 +534,7 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
     if (part.partOfUri != null) {
       if (uriIsValid(part.partOfUri) && part.partOfUri != uri) {
         // This is a warning, but the part is still included.
-        addWarning(
+        addProblem(
             templatePartOfUriMismatch.withArguments(
                 part.fileUri, uri, part.partOfUri),
             -1,
@@ -513,7 +544,7 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
       if (name != null) {
         if (part.partOfName != name) {
           // This is a warning, but the part is still included.
-          addWarning(
+          addProblem(
               templatePartOfLibraryNameMismatch.withArguments(
                   part.fileUri, name, part.partOfName),
               -1,
@@ -521,7 +552,7 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
         }
       } else {
         // This is a warning, but the part is still included.
-        addWarning(
+        addProblem(
             templatePartOfUseUri.withArguments(
                 part.fileUri, fileUri, part.partOfName),
             -1,
@@ -610,7 +641,14 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
       List<TypeVariableBuilder> original);
 
   @override
-  String get fullNameForErrors => name ?? "<library '$relativeFileUri'>";
+  String get fullNameForErrors {
+    // TODO(ahe): Consider if we should use relativizeUri here. The downside to
+    // doing that is that this URI may be used in an error message. Ideally, we
+    // should create a class that represents qualified names that we can
+    // relativize when printing a message, but still store the full URI in
+    // .dill files.
+    return name ?? "<library '$fileUri'>";
+  }
 
   @override
   void prepareTopLevelInference(
@@ -629,41 +667,6 @@ abstract class SourceLibraryBuilder<T extends TypeBuilder, R>
     forEach((String name, Builder member) {
       member.instrumentTopLevelInference(instrumentation);
     });
-  }
-
-  @override
-  void addWarning(Message message, int charOffset, Uri uri,
-      {bool silent: false, LocatedMessage context}) {
-    super
-        .addWarning(message, charOffset, uri, silent: silent, context: context);
-    if (!silent) {
-      // TODO(ahe): All warnings should have a charOffset, but currently, some
-      // unresolved type warnings lack them.
-      if (message.code != codeTypeNotFound && charOffset != -1) {
-        // TODO(ahe): Should I add a value for messages?
-        loader.instrumentation?.record(uri, charOffset, "warning",
-            new InstrumentationValueLiteral(message.code.name));
-        if (context != null) {
-          loader.instrumentation?.record(context.uri, context.charOffset,
-              "context", new InstrumentationValueLiteral(context.code.name));
-        }
-      }
-    }
-  }
-
-  @override
-  void addError(Message message, int charOffset, Uri uri,
-      {bool silent: false, LocatedMessage context}) {
-    super.addError(message, charOffset, uri, silent: silent, context: context);
-    if (!silent) {
-      // TODO(ahe): Should I add a value for messages?
-      loader.instrumentation?.record(uri, charOffset, "error",
-          new InstrumentationValueLiteral(message.code.name));
-      if (context != null) {
-        loader.instrumentation?.record(context.uri, context.charOffset,
-            "context", new InstrumentationValueLiteral(context.code.name));
-      }
-    }
   }
 }
 

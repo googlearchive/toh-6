@@ -1,3 +1,7 @@
+// Copyright (c) 2017, the Dart project authors.  Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+
 import 'dart:async';
 
 typedef void HandleData<S, T>(S value, EventSink<T> sink);
@@ -16,7 +20,7 @@ StreamTransformer<S, T> fromHandlers<S, T>(
         handleError: handleError,
         handleDone: handleDone);
 
-class _StreamTransformer<S, T> implements StreamTransformer<S, T> {
+class _StreamTransformer<S, T> extends StreamTransformerBase<S, T> {
   final HandleData<S, T> _handleData;
   final HandleDone<T> _handleDone;
   final HandleError<T> _handleError;
@@ -51,9 +55,9 @@ class _StreamTransformer<S, T> implements StreamTransformer<S, T> {
     StreamSubscription<S> subscription;
     controller.onListen = () {
       if (subscription != null) return;
-      bool valuesDone = false;
+      var valuesDone = false;
       subscription = values.listen((value) => _handleData(value, controller),
-          onError: (error, stackTrace) {
+          onError: (error, StackTrace stackTrace) {
         _handleError(error, stackTrace, controller);
       }, onDone: () {
         valuesDone = true;

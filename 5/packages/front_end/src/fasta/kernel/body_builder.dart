@@ -4,8 +4,12 @@
 
 library fasta.body_builder;
 
-import 'package:kernel/ast.dart'
-    hide InvalidExpression, InvalidInitializer, InvalidStatement;
+// ignore: UNDEFINED_HIDDEN_NAME
+import 'dart:core' hide MapEntry;
+
+import 'package:kernel/ast.dart' hide InvalidExpression, InvalidInitializer;
+
+import 'package:kernel/type_algebra.dart' show instantiateToBounds;
 
 import 'package:kernel/class_hierarchy.dart' show ClassHierarchy;
 
@@ -38,6 +42,8 @@ import '../parser.dart'
         closeBraceTokenFor,
         optional;
 
+import '../parser/class_member_parser.dart' show ClassMemberParser;
+
 import '../parser/formal_parameter_kind.dart'
     show isOptionalPositionalFormalParameterKind;
 
@@ -58,6 +64,8 @@ import '../scanner.dart' show Token;
 import '../scanner/token.dart' show isBinaryOperator, isMinusOperator;
 
 import '../scope.dart' show ProblemBuilder;
+
+import '../source/outline_builder.dart' show OutlineBuilder;
 
 import '../source/scope_listener.dart'
     show JumpTargetKind, NullValue, ScopeListener;
@@ -454,14 +462,14 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         }
         field.initializer = initializer;
         _typeInferrer.inferFieldInitializer(
-            field.hasImplicitType ? null : field.builtType, initializer);
+            this, field.hasImplicitType ? null : field.builtType, initializer);
       }
     }
     pop(); // Type.
     pop(); // Modifiers.
     List annotations = pop();
     if (annotations != null) {
-      _typeInferrer.inferMetadata(annotations);
+      _typeInferrer.inferMetadata(this, annotations);
       Field field = fields.first.target;
       // The first (and often only field) will not get a clone.
       annotations.forEach((annotation) => field.addAnnotation(annotation));
@@ -577,7 +585,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       }
       initializer = buildInvalidInitializer(node, token.charOffset);
     }
-    _typeInferrer.inferInitializer(initializer);
+    _typeInferrer.inferInitializer(this, initializer);
     if (member is KernelConstructorBuilder && !member.isExternal) {
       member.addInitializer(initializer, _typeInferrer);
     } else {
@@ -613,12 +621,12 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
             parameter.initializer ?? new ShadowNullLiteral();
         realParameter.initializer = initializer..parent = realParameter;
         _typeInferrer.inferParameterInitializer(
-            initializer, realParameter.type);
+            this, initializer, realParameter.type);
       }
     }
 
     _typeInferrer.inferFunctionBody(
-        _computeReturnTypeContext(member), asyncModifier, body);
+        this, _computeReturnTypeContext(member), asyncModifier, body);
     if (builder.kind == ProcedureKind.Setter) {
       bool oneParameter = formals != null &&
           formals.required.length == 1 &&
@@ -653,7 +661,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       }
     }
     Member target = builder.target;
-    _typeInferrer.inferMetadata(annotations);
+    _typeInferrer.inferMetadata(this, annotations);
     for (Expression annotation in annotations ?? const []) {
       target.addAnnotation(annotation);
     }
@@ -670,7 +678,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   @override
   List<Expression> finishMetadata() {
     List<Expression> expressions = pop();
-    _typeInferrer.inferMetadata(expressions);
+    _typeInferrer.inferMetadata(this, expressions);
     return expressions;
   }
 
@@ -932,7 +940,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     Expression argument = popForValue();
     Expression receiver = pop();
     var logicalExpression =
-        new ShadowLogicalExpression(receiver, token.stringValue, argument);
+        new ShadowLogicalExpression(receiver, token.stringValue, argument)
+          ..fileOffset = offsetForToken(token);
     typePromoter.exitLogicalExpression(argument, logicalExpression);
     push(logicalExpression);
   }
@@ -948,7 +957,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
             buildIsNull(new VariableGet(variable), offsetForToken(token)),
             b,
             new VariableGet(variable),
-            null)));
+            null))
+      ..fileOffset = offsetForToken(token));
   }
 
   /// Handle `a?.b(...)`.
@@ -994,9 +1004,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     Name kernelName = new Name(name, library.library);
     LocatedMessage context;
     if (candidate != null) {
-      // TODO(ahe): Not sure `candidate.location.file` is guaranteed to be
-      // relative to Uri.base.
-      Uri uri = Uri.base.resolve(candidate.location.file);
+      Uri uri = candidate.location.file;
       int offset = candidate.fileOffset;
       Message message;
       if (offset == -1 && candidate is Constructor) {
@@ -1052,7 +1060,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         ? fasta.templateSuperclassHasNoGetter.withArguments(name.name)
         : fasta.templateGetterNotFound.withArguments(name.name);
     if (reportWarning) {
-      warning(message, charOffset, name.name.length, context: context);
+      addProblemErrorIfConst(message, charOffset, name.name.length,
+          context: context);
     }
     return message;
   }
@@ -1064,7 +1073,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         ? fasta.templateSuperclassHasNoSetter.withArguments(name.name)
         : fasta.templateSetterNotFound.withArguments(name.name);
     if (reportWarning) {
-      warning(message, charOffset, name.name.length, context: context);
+      addProblemErrorIfConst(message, charOffset, name.name.length,
+          context: context);
     }
     return message;
   }
@@ -1076,14 +1086,15 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         ? fasta.templateSuperclassHasNoMethod.withArguments(name.name)
         : fasta.templateMethodNotFound.withArguments(name.name);
     if (reportWarning) {
-      warning(message, charOffset, name.name.length, context: context);
+      addProblemErrorIfConst(message, charOffset, name.name.length,
+          context: context);
     }
     return message;
   }
 
   @override
   void warnTypeArgumentsMismatch(String name, int expected, int charOffset) {
-    warning(
+    addProblemErrorIfConst(
         fasta.templateTypeArgumentMismatch.withArguments(name, '${expected}'),
         charOffset,
         name.length);
@@ -1235,7 +1246,11 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         deprecated_addCompileTimeError(
             charOffset, "Not a constant expression.");
       }
-      return new TypeDeclarationAccessor(this, builder, name, token);
+      TypeDeclarationAccessor accessor = new TypeDeclarationAccessor(
+          this, prefix, charOffset, builder, name, token);
+      return (prefix?.deferred == true)
+          ? new DeferredAccessor(this, token, prefix, accessor)
+          : accessor;
     } else if (builder.isLocal) {
       if (constantExpressionRequired &&
           !builder.isConst &&
@@ -1284,7 +1299,12 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       return new ThisPropertyAccessor(this, token, n, getter, setter);
     } else if (builder.isRegularMethod) {
       assert(builder.isStatic || builder.isTopLevel);
-      return new StaticAccessor(this, token, builder.target, null);
+      StaticAccessor accessor = new StaticAccessor(
+          this, token, builder.target, null,
+          prefixName: prefix?.name);
+      return (prefix?.deferred == true)
+          ? new DeferredAccessor(this, token, prefix, accessor)
+          : accessor;
     } else if (builder is PrefixBuilder) {
       if (constantExpressionRequired && builder.deferred) {
         deprecated_addCompileTimeError(
@@ -1308,8 +1328,9 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       } else if (builder.isField && !builder.isFinal) {
         setter = builder;
       }
-      StaticAccessor accessor =
-          new StaticAccessor.fromBuilder(this, builder, token, setter);
+      StaticAccessor accessor = new StaticAccessor.fromBuilder(
+          this, builder, token, setter,
+          prefix: prefix);
       if (constantExpressionRequired) {
         Member readTarget = accessor.readTarget;
         if (!(readTarget is Field && readTarget.isConst ||
@@ -1319,7 +1340,9 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
               charOffset, "Not a constant expression.");
         }
       }
-      return accessor;
+      return (prefix?.deferred == true)
+          ? new DeferredAccessor(this, token, prefix, accessor)
+          : accessor;
     }
   }
 
@@ -1359,8 +1382,10 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       // Contains more than just \' or \".
       if (first.lexeme.length > 1) {
         String value = unescapeFirstStringPart(first.lexeme, quote);
-        expressions.add(
-            new ShadowStringLiteral(value)..fileOffset = offsetForToken(first));
+        if (value.isNotEmpty) {
+          expressions.add(new ShadowStringLiteral(value)
+            ..fileOffset = offsetForToken(first));
+        }
       }
       for (int i = 1; i < parts.length - 1; i++) {
         var part = parts[i];
@@ -1377,8 +1402,10 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       // Contains more than just \' or \".
       if (last.lexeme.length > 1) {
         String value = unescapeLastStringPart(last.lexeme, quote);
-        expressions.add(
-            new ShadowStringLiteral(value)..fileOffset = offsetForToken(last));
+        if (value.isNotEmpty) {
+          expressions.add(new ShadowStringLiteral(value)
+            ..fileOffset = offsetForToken(last));
+        }
       }
       push(new ShadowStringConcatenation(expressions)
         ..fileOffset = offsetForToken(endToken));
@@ -1426,9 +1453,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     debugEvent("LiteralInt");
     int value = int.parse(token.lexeme, onError: (_) => null);
     if (value == null) {
-      push(buildCompileTimeError(
-          fasta.templateIntegerLiteralIsOutOfRange.withArguments(token),
-          token.charOffset));
+      push(new LargeIntAccessor(this, token));
     } else {
       push(new ShadowIntLiteral(value)..fileOffset = offsetForToken(token));
     }
@@ -1712,17 +1737,15 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       typeArgument = typeArguments.first;
       if (typeArguments.length > 1) {
         typeArgument = null;
-        warningNotError(fasta.messageListLiteralTooManyTypeArguments,
+        addProblem(fasta.messageListLiteralTooManyTypeArguments,
             beginToken.charOffset);
+      } else {
+        typeArgument = instantiateToBounds(typeArgument, coreTypes.objectClass);
       }
     }
-    bool isConst = constKeyword != null;
-    if (constantExpressionRequired && !isConst) {
-      deprecated_addCompileTimeError(
-          offsetForToken(beginToken), "Not a constant expression.");
-    }
     push(new ShadowListLiteral(expressions,
-        typeArgument: typeArgument, isConst: isConst)
+        typeArgument: typeArgument,
+        isConst: constKeyword != null || constantExpressionRequired)
       ..fileOffset = offsetForToken(constKeyword ?? beginToken));
   }
 
@@ -1759,22 +1782,19 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       if (typeArguments.length != 2) {
         keyType = null;
         valueType = null;
-        warningNotError(fasta.messageListLiteralTypeArgumentMismatch,
+        addProblem(fasta.messageListLiteralTypeArgumentMismatch,
             beginToken.charOffset);
       } else {
-        keyType = typeArguments[0];
-        valueType = typeArguments[1];
+        keyType = instantiateToBounds(typeArguments[0], coreTypes.objectClass);
+        valueType =
+            instantiateToBounds(typeArguments[1], coreTypes.objectClass);
       }
     }
 
-    bool isConst = constKeyword != null;
-
-    if (constantExpressionRequired && !isConst) {
-      deprecated_addCompileTimeError(
-          offsetForToken(beginToken), "Not a constant expression.");
-    }
     push(new ShadowMapLiteral(entries,
-        keyType: keyType, valueType: valueType, isConst: isConst)
+        keyType: keyType,
+        valueType: valueType,
+        isConst: constKeyword != null || constantExpressionRequired)
       ..fileOffset = constKeyword?.charOffset ?? offsetForToken(beginToken));
   }
 
@@ -1830,22 +1850,18 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
             isQualified: true, prefix: prefix);
       } else {
         String displayName = debugName(getNodeName(prefix), suffix.name);
-        warningNotError(fasta.templateNotAType.withArguments(displayName),
+        addProblem(fasta.templateNotAType.withArguments(displayName),
             beginToken.charOffset);
         push(const InvalidType());
         return;
       }
     }
-    if (name is TypeDeclarationAccessor) {
-      push(name.buildType(arguments));
-    } else if (name is FastaAccessor) {
-      warningNotError(fasta.templateNotAType.withArguments(beginToken.lexeme),
-          beginToken.charOffset);
-      push(const InvalidType());
+    if (name is FastaAccessor) {
+      push(name.buildTypeWithBuiltArguments(arguments));
     } else if (name is TypeBuilder) {
       push(name.build(library));
     } else if (name is PrefixBuilder) {
-      warningNotError(fasta.templateNotAType.withArguments(name.name),
+      addProblem(fasta.templateNotAType.withArguments(name.name),
           beginToken.charOffset);
       push(const InvalidType());
     } else {
@@ -1858,15 +1874,12 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   @override
   void beginFunctionType(Token beginToken) {
     debugEvent("beginFunctionType");
-    enterFunctionTypeScope();
   }
 
-  void enterFunctionTypeScope() {
+  void enterFunctionTypeScope(List typeVariables) {
     debugEvent("enterFunctionTypeScope");
-    List typeVariables = pop();
     enterLocalScope(null,
-        scope.createNestedScope("function-type scope", isModifiable: false));
-    push(typeVariables ?? NullValue.TypeVariables);
+        scope.createNestedScope("function-type scope", isModifiable: true));
     if (typeVariables != null) {
       ScopeBuilder scopeBuilder = new ScopeBuilder(scope);
       for (KernelTypeVariableBuilder builder in typeVariables) {
@@ -1939,11 +1952,11 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   }
 
   @override
-  void beginConditionalExpression() {
+  void beginConditionalExpression(Token question) {
     Expression condition = popForValue();
     typePromoter.enterThen(condition);
     push(condition);
-    super.beginConditionalExpression();
+    super.beginConditionalExpression(question);
   }
 
   @override
@@ -1962,7 +1975,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     Expression condition = pop();
     typePromoter.exitConditional();
     push(new ShadowConditionalExpression(
-        condition, thenExpression, elseExpression));
+        condition, thenExpression, elseExpression)
+      ..fileOffset = question.offset);
   }
 
   @override
@@ -2042,7 +2056,6 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   void beginFunctionTypedFormalParameter(Token token) {
     debugEvent("beginFunctionTypedFormalParameter");
     functionNestingLevel++;
-    enterFunctionTypeScope();
   }
 
   @override
@@ -2146,7 +2159,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         ]);
       }
     }
-    push(new Catch(exception, body, guard: type, stackTrace: stackTrace));
+    push(new Catch(exception, body, guard: type, stackTrace: stackTrace)
+      ..fileOffset = offsetForToken(onKeyword ?? catchKeyword));
   }
 
   @override
@@ -2204,6 +2218,16 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       String operator = token.stringValue;
       if (optional("-", token)) {
         operator = "unary-";
+
+        if (receiver is LargeIntAccessor) {
+          int value =
+              int.parse("-" + receiver.token.lexeme, onError: (_) => null);
+          if (value != null) {
+            push(new ShadowIntLiteral(value)
+              ..fileOffset = offsetForToken(token));
+            return;
+          }
+        }
       }
       bool isSuper = false;
       Expression receiverValue;
@@ -2302,13 +2326,21 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       var prefix = type[0];
       identifier = type[1];
       if (prefix is PrefixBuilder) {
-        type = scopeLookup(prefix.exportScope, identifier.name, start,
+        type = scopeLookup(
+            prefix.exportScope, identifier.name, identifier.token,
             isQualified: true, prefix: prefix);
         identifier = null;
       } else if (prefix is TypeDeclarationAccessor) {
         type = prefix;
+      } else if (prefix is FastaAccessor) {
+        String name = suffix == null
+            ? "${prefix.plainNameForRead}.${identifier.name}"
+            : "${prefix.plainNameForRead}.${identifier.name}.$suffix";
+        type = new UnresolvedAccessor(
+            this, new Name(name, library.library), prefix.token);
       } else {
-        type = new Identifier(start);
+        unhandled("${prefix.runtimeType}", "pushQualifiedReference",
+            start.charOffset, uri);
       }
     }
     String name;
@@ -2328,7 +2360,12 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
 
   @override
   Expression buildStaticInvocation(Member target, Arguments arguments,
-      {bool isConst: false, int charOffset: -1, Member initialTarget}) {
+      {bool isConst: false,
+      int charOffset: -1,
+      Member initialTarget,
+      String prefixName,
+      int targetOffset: -1,
+      Class targetClass}) {
     initialTarget ??= target;
     List<TypeParameter> typeParameters = target.function.typeParameters;
     if (target is Constructor) {
@@ -2345,7 +2382,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         return deprecated_buildCompileTimeError(
             "Not a const constructor.", charOffset);
       }
-      return new ShadowConstructorInvocation(target, initialTarget, arguments,
+      return new ShadowConstructorInvocation(
+          prefixName, target, initialTarget, arguments,
           isConst: isConst)
         ..fileOffset = charOffset;
     } else {
@@ -2355,11 +2393,13 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
             "Not a const factory.", charOffset);
       } else if (procedure.isFactory) {
         return new ShadowFactoryConstructorInvocation(
-            target, initialTarget, arguments,
+            prefixName, target, initialTarget, arguments,
             isConst: isConst)
           ..fileOffset = charOffset;
       } else {
-        return new ShadowStaticInvocation(target, arguments, isConst: isConst)
+        return new ShadowStaticInvocation(
+            prefixName, targetOffset, targetClass, target, arguments,
+            isConst: isConst)
           ..fileOffset = charOffset;
       }
     }
@@ -2438,101 +2478,139 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     ShadowArguments arguments = pop();
     String name = pop();
     List<DartType> typeArguments = pop();
+
+    String prefixName;
     var type = pop();
+    PrefixBuilder deferredPrefix;
+    int checkOffset;
+    if (type is DeferredAccessor) {
+      DeferredAccessor accessor = type;
+      type = accessor.accessor;
+      deferredPrefix = accessor.builder;
+      checkOffset = accessor.token.charOffset;
+    }
+
     if (type is TypeDeclarationAccessor) {
       TypeDeclarationAccessor accessor = type;
+      if (accessor.prefix != null) {
+        prefixName = accessor.prefix.name;
+        nameToken = nameToken.next.next;
+      }
       type = accessor.declaration;
     }
+
     bool savedConstantExpressionRequired = pop();
-    () {
-      if (arguments == null) {
-        push(deprecated_buildCompileTimeError(
-            "No arguments.", nameToken.charOffset));
-        return;
-      }
-
-      if (typeArguments != null) {
-        assert(arguments.types.isEmpty);
-        ShadowArguments.setExplicitArgumentTypes(arguments, typeArguments);
-      }
-
-      String errorName;
-      if (type is ClassBuilder) {
-        if (type is EnumBuilder) {
-          push(deprecated_buildCompileTimeError(
-              "An enum class can't be instantiated.", nameToken.charOffset));
-          return;
-        }
-        Builder b =
-            type.findConstructorOrFactory(name, token.charOffset, uri, library);
-        Member target;
-        Member initialTarget;
-        if (b == null) {
-          // Not found. Reported below.
-        } else if (b.isConstructor) {
-          initialTarget = b.target;
-          if (type.isAbstract) {
-            push(new ShadowSyntheticExpression(evaluateArgumentsBefore(
-                arguments,
-                buildAbstractClassInstantiationError(
-                    fasta.templateAbstractClassInstantiation
-                        .withArguments(type.name),
-                    type.name,
-                    nameToken.charOffset))));
-            return;
-          } else {
-            target = initialTarget;
-          }
-        } else if (b.isFactory) {
-          initialTarget = b.target;
-          target = getRedirectionTarget(initialTarget);
-          if (target == null) {
-            push(deprecated_buildCompileTimeError(
-                "Cyclic definition of factory '${name}'.",
-                nameToken.charOffset));
-            return;
-          }
-          if (target is Constructor && target.enclosingClass.isAbstract) {
-            push(new ShadowSyntheticExpression(evaluateArgumentsBefore(
-                arguments,
-                buildAbstractClassInstantiationError(
-                    fasta.templateAbstractRedirectedClassInstantiation
-                        .withArguments(target.enclosingClass.name),
-                    target.enclosingClass.name,
-                    nameToken.charOffset))));
-            return;
-          }
-          RedirectingFactoryBody body = getRedirectingFactoryBody(target);
-          if (body != null) {
-            // If the redirection target is itself a redirecting factory, it
-            // means that it is unresolved. So we set target to null so we
-            // can generate a no-such-method error below.
-            assert(body.isUnresolved);
-            target = null;
-            errorName = body.unresolvedName;
-          }
-        }
-        if (target is Constructor ||
-            (target is Procedure && target.kind == ProcedureKind.Factory)) {
-          push(buildStaticInvocation(target, arguments,
-              isConst: optional("const", token) || optional("@", token),
-              charOffset: nameToken.charOffset,
-              initialTarget: initialTarget));
-          return;
-        } else {
-          errorName ??= debugName(type.name, name);
-        }
-      } else {
-        errorName = debugName(getNodeName(type), name);
-      }
-      errorName ??= name;
+    if (type is TypeDeclarationBuilder) {
+      Expression expression = buildConstructorInvocation(
+          type,
+          nameToken,
+          arguments,
+          name,
+          typeArguments,
+          token.charOffset,
+          optional("const", token) || optional("@", token),
+          prefixName: prefixName);
+      push(deferredPrefix != null
+          ? wrapInDeferredCheck(expression, deferredPrefix, checkOffset)
+          : expression);
+    } else if (type is ErrorAccessor) {
+      push(type.buildError(arguments));
+    } else {
       push(throwNoSuchMethodError(
           new NullLiteral()..fileOffset = token.charOffset,
-          errorName,
+          debugName(getNodeName(type), name),
           arguments,
           nameToken.charOffset));
-    }();
+    }
     constantExpressionRequired = savedConstantExpressionRequired;
+  }
+
+  @override
+  Expression buildConstructorInvocation(
+      TypeDeclarationBuilder type,
+      Token nameToken,
+      Arguments arguments,
+      String name,
+      List<DartType> typeArguments,
+      int charOffset,
+      bool isConst,
+      {String prefixName}) {
+    if (arguments == null) {
+      return deprecated_buildCompileTimeError(
+          "No arguments.", nameToken.charOffset);
+    }
+
+    if (typeArguments != null) {
+      assert(arguments.types.isEmpty);
+      ShadowArguments.setExplicitArgumentTypes(arguments, typeArguments);
+    }
+
+    String errorName;
+    if (type is ClassBuilder) {
+      if (type is EnumBuilder) {
+        return deprecated_buildCompileTimeError(
+            "An enum class can't be instantiated.", nameToken.charOffset);
+      }
+      Builder b = type.findConstructorOrFactory(name, charOffset, uri, library);
+      Member target;
+      Member initialTarget;
+      if (b == null) {
+        // Not found. Reported below.
+      } else if (b.isConstructor) {
+        initialTarget = b.target;
+        if (type.isAbstract) {
+          return new ShadowSyntheticExpression(evaluateArgumentsBefore(
+              arguments,
+              buildAbstractClassInstantiationError(
+                  fasta.templateAbstractClassInstantiation
+                      .withArguments(type.name),
+                  type.name,
+                  nameToken.charOffset)));
+        } else {
+          target = initialTarget;
+        }
+      } else if (b.isFactory) {
+        initialTarget = b.target;
+        target = getRedirectionTarget(initialTarget);
+        if (target == null) {
+          return deprecated_buildCompileTimeError(
+              "Cyclic definition of factory '${name}'.", nameToken.charOffset);
+        }
+        if (target is Constructor && target.enclosingClass.isAbstract) {
+          return new ShadowSyntheticExpression(evaluateArgumentsBefore(
+              arguments,
+              buildAbstractClassInstantiationError(
+                  fasta.templateAbstractRedirectedClassInstantiation
+                      .withArguments(target.enclosingClass.name),
+                  target.enclosingClass.name,
+                  nameToken.charOffset)));
+        }
+        RedirectingFactoryBody body = getRedirectingFactoryBody(target);
+        if (body != null) {
+          // If the redirection target is itself a redirecting factory, it
+          // means that it is unresolved. So we set target to null so we
+          // can generate a no-such-method error below.
+          assert(body.isUnresolved);
+          target = null;
+          errorName = body.unresolvedName;
+        }
+      }
+      if (target is Constructor ||
+          (target is Procedure && target.kind == ProcedureKind.Factory)) {
+        return buildStaticInvocation(target, arguments,
+            isConst: isConst,
+            charOffset: nameToken.charOffset,
+            prefixName: prefixName,
+            initialTarget: initialTarget);
+      } else {
+        errorName ??= debugName(type.name, name);
+      }
+    } else {
+      errorName = debugName(getNodeName(type), name);
+    }
+    errorName ??= name;
+    return throwNoSuchMethodError(new NullLiteral()..fileOffset = charOffset,
+        errorName, arguments, nameToken.charOffset);
   }
 
   @override
@@ -2600,7 +2678,6 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
 
   void enterFunction() {
     debugEvent("enterFunction");
-    enterFunctionTypeScope();
     functionNestingLevel++;
     push(switchScope ?? NullValue.SwitchScope);
     switchScope = null;
@@ -2680,7 +2757,9 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     } else if (declaration is ExpressionStatement) {
       // If [declaration] isn't a [FunctionDeclaration], it must be because
       // there was a compile-time error.
-      assert(library.hasCompileTimeErrors);
+      // TODO(askesc): Be more specific about the error code when we have
+      // errors represented as explicit invalid nodes.
+      assert(library.loader.handledErrors.isNotEmpty);
 
       // TODO(paulberry,ahe): ensure that when integrating with analyzer, type
       // inference is still performed for the dropped declaration.
@@ -2779,6 +2858,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     }
     VariableDeclaration variable;
     bool declaresVariable = false;
+    ShadowSyntheticExpression syntheticAssignment;
     if (lvalue is VariableDeclaration) {
       declaresVariable = true;
       variable = lvalue;
@@ -2797,18 +2877,23 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       ///       lvalue = #t;
       ///       body;
       ///     }
-      variable = new VariableDeclaration.forValue(null);
+      variable =
+          new ShadowVariableDeclaration.forValue(null, functionNestingLevel);
+      var fact = typePromoter.getFactForAccess(variable, functionNestingLevel);
+      var scope = typePromoter.currentScope;
+      syntheticAssignment = lvalue.buildAssignment(
+          new ShadowVariableGet(variable, fact, scope)
+            ..fileOffset = inKeyword.offset,
+          voidContext: true);
       body = combineStatements(
-          new ShadowExpressionStatement(lvalue
-              .buildAssignment(new VariableGet(variable), voidContext: true)),
-          body);
+          new ShadowLoopAssignmentStatement(syntheticAssignment), body);
     } else {
       variable = new VariableDeclaration.forValue(
           deprecated_buildCompileTimeError("Expected lvalue, but got ${lvalue}",
               forToken.next.next.charOffset));
     }
     Statement result = new ShadowForInStatement(
-        variable, expression, body, declaresVariable,
+        variable, expression, body, declaresVariable, syntheticAssignment,
         isAsync: awaitToken != null)
       ..fileOffset = awaitToken?.charOffset ?? forToken.charOffset
       ..bodyOffset = body.fileOffset;
@@ -2935,31 +3020,9 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         break;
 
       case Assert.Initializer:
-        push(buildAssertInitializer(statement));
+        push(new ShadowAssertInitializer(statement));
         break;
     }
-  }
-
-  Initializer buildAssertInitializer(AssertStatement statement) {
-    // Since kernel only has asserts in statment form, we convert it to an
-    // expression by wrapping it in an anonymous function which we call
-    // immediately.
-    //
-    // Additionally, kernel has no initializer that evaluates an expression,
-    // but it does have `LocalInitializer` which requires a variable declartion.
-    //
-    // So we produce an initializer like this:
-    //
-    //    var #t0 = (() { statement; }) ()
-    return new ShadowAssertInitializer(
-        new VariableDeclaration.forValue(buildMethodInvocation(
-            new FunctionExpression(new FunctionNode(statement)),
-            callName,
-            new Arguments.empty(),
-            statement.fileOffset,
-            isConstantExpression: true,
-            isImplicitCall: true)),
-        statement);
   }
 
   @override
@@ -3066,16 +3129,8 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
         }
       }
     }
-    // Check all but the last case for the following:
-    // 1. That it isn't a default case (which should be last).
-    // 2. That it doesn't fall through to the next case.
     for (int i = 0; i < caseCount - 1; i++) {
       SwitchCase current = cases[i];
-      if (current.isDefault) {
-        deprecated_addCompileTimeError(current.fileOffset,
-            "'default' switch case should be the last case.");
-        continue;
-      }
       Block block = current.body;
       // [block] is a synthetic block that is added to handle variable
       // declarations in the switch case.
@@ -3201,22 +3256,39 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   }
 
   @override
+  void beginTypeVariables(Token token) {
+    debugEvent("beginTypeVariables");
+    OutlineBuilder listener = new OutlineBuilder(library);
+    new ClassMemberParser(listener).parseTypeVariablesOpt(token.previous);
+    enterFunctionTypeScope(listener.pop());
+  }
+
+  @override
+  void handleNoTypeVariables(Token token) {
+    debugEvent("NoTypeVariables");
+    enterFunctionTypeScope(null);
+    push(NullValue.TypeVariables);
+  }
+
+  @override
   void endTypeVariable(Token token, Token extendsOrSuper) {
     debugEvent("TypeVariable");
     DartType bound = pop();
-    if (bound != null) {
-      // TODO(ahe): To handle F-bounded types, this needs to be a TypeBuilder.
-      warningNotError(
-          fasta.templateInternalProblemUnimplemented
-              .withArguments("bounds on type variables"),
-          offsetForToken(extendsOrSuper.next));
-    }
     Identifier name = pop();
     // TODO(ahe): Do not discard metadata.
     pop(); // Metadata.
-    push(new KernelTypeVariableBuilder(
-        name.name, library, offsetForToken(name.token), null)
-      ..finish(library, library.loader.coreLibrary["Object"]));
+    KernelTypeVariableBuilder variable;
+    Object inScope = scopeLookup(scope, name.name, token);
+    if (inScope is TypeDeclarationAccessor) {
+      variable = inScope.declaration;
+    } else {
+      // Something went wrong when pre-parsing the type variables.
+      // Assume an error is reported elsewhere.
+      variable = new KernelTypeVariableBuilder(
+          name.name, library, offsetForToken(name.token), null);
+    }
+    variable.parameter.bound = bound;
+    push(variable..finish(library, library.loader.coreLibrary["Object"]));
   }
 
   @override
@@ -3254,15 +3326,13 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   @override
   void handleRecoverableError(
       Message message, Token startToken, Token endToken) {
-    /// TODO(danrubel): Ignore this error until we deprecate `native` support.
     if (message == messageNativeClauseShouldBeAnnotation) {
+      // TODO(danrubel): Ignore this error until we deprecate `native` support.
       return;
     }
-    bool silent = hasParserError ||
-        message.code == fasta.codeFinalFieldWithoutInitializer ||
-        message.code == fasta.codeConstFieldWithoutInitializer;
-    deprecated_addCompileTimeError(offsetForToken(startToken), message.message,
-        silent: silent);
+    int start = offsetForToken(startToken);
+    int length = (start == -1) ? 1 : (offsetForToken(endToken) - start);
+    addCompileTimeError(message, start, length);
   }
 
   @override
@@ -3312,14 +3382,14 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   }
 
   Expression buildFallThroughError(int charOffset) {
-    warningNotError(fasta.messageSwitchCaseFallThrough, charOffset);
+    addProblem(fasta.messageSwitchCaseFallThrough, charOffset);
 
     Location location = messages.getLocationFromUri(uri, charOffset);
 
     return new Throw(buildStaticInvocation(
         library.loader.coreTypes.fallThroughErrorUrlAndLineConstructor,
         new Arguments(<Expression>[
-          new StringLiteral(location?.file ?? uri.toString()),
+          new StringLiteral("${location?.file ?? uri}"),
           new IntLiteral(location?.line ?? 0)
         ]),
         charOffset: charOffset));
@@ -3328,7 +3398,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   Expression buildAbstractClassInstantiationError(
       Message message, String className,
       [int charOffset = -1]) {
-    warning(message, charOffset, className.length);
+    addProblemErrorIfConst(message, charOffset, className.length);
     Builder constructor = library.loader.getAbstractClassInstantiationError();
     return new Throw(buildStaticInvocation(constructor.target,
         new ShadowArguments(<Expression>[new StringLiteral(className)])));
@@ -3388,11 +3458,11 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       if (builder.isFinal && builder.hasInitializer) {
         // TODO(ahe): If CL 2843733002 is landed, this becomes a compile-time
         // error. Also, this is a compile-time error in strong mode.
-        warningNotError(
+        addProblem(
             fasta.templateFinalInstanceVariableAlreadyInitialized
                 .withArguments(name),
             offset);
-        warningNotError(
+        addProblem(
             fasta.templateFinalInstanceVariableAlreadyInitializedCause
                 .withArguments(name),
             builder.charOffset);
@@ -3460,12 +3530,12 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
 
   @override
   dynamic deprecated_addCompileTimeError(int charOffset, String message,
-      {bool silent: false, bool wasHandled: false}) {
+      {bool wasHandled: false}) {
     // TODO(ahe): If constantExpressionRequired is set, set it to false to
     // avoid a long list of errors.
     return library.addCompileTimeError(
         fasta.templateUnspecified.withArguments(message), charOffset, uri,
-        silent: silent, wasHandled: wasHandled);
+        wasHandled: wasHandled);
   }
 
   @override
@@ -3480,25 +3550,6 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
     }
   }
 
-  void warningNotError(Message message, int charOffset) {
-    library.addWarning(message, charOffset, uri);
-  }
-
-  @override
-  void warning(Message message, int offset, int length,
-      {LocatedMessage context}) {
-    if (constantExpressionRequired) {
-      addCompileTimeError(message, offset, length);
-    } else {
-      library.addWarning(message, offset, uri, context: context);
-    }
-  }
-
-  @override
-  void nit(Message message, int charOffset) {
-    library.addNit(message, charOffset, uri);
-  }
-
   @override
   DartType validatedTypeVariableUse(
       TypeParameterType type, int offset, bool nonInstanceAccessIsError) {
@@ -3508,7 +3559,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
       if (nonInstanceAccessIsError) {
         addCompileTimeError(message, offset, length);
       } else {
-        warning(message, offset, length);
+        addProblemErrorIfConst(message, offset, length);
       }
       return const InvalidType();
     } else if (constantExpressionRequired) {
@@ -3561,7 +3612,7 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
           warnUnresolvedMethod(name, offset, isSuper: true);
         } else if (!areArgumentsCompatible(target.function, arguments)) {
           target = null;
-          warning(
+          addProblemErrorIfConst(
               fasta.templateSuperclassMethodArgumentMismatch
                   .withArguments(name.name),
               offset,
@@ -3598,8 +3649,26 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   }
 
   @override
-  void addCompileTimeError(Message message, int offset, int length) {
-    library.addCompileTimeError(message, offset, uri);
+  void addCompileTimeError(Message message, int charOffset, int length) {
+    library.addCompileTimeError(message, charOffset, uri);
+  }
+
+  @override
+  void addProblem(Message message, int charOffset) {
+    library.addProblem(message, charOffset, uri);
+  }
+
+  @override
+  void addProblemErrorIfConst(Message message, int charOffset, int length,
+      {LocatedMessage context}) {
+    // TODO(askesc): Instead of deciding on the severity, this method should
+    // take two messages: one to use when a constant expression is
+    // required and one to use otherwise.
+    if (constantExpressionRequired) {
+      addCompileTimeError(message, charOffset, length);
+    } else {
+      library.addProblem(message, charOffset, uri, context: context);
+    }
   }
 
   @override
@@ -3608,8 +3677,20 @@ class BodyBuilder extends ScopeListener<JumpTarget> implements BuilderHelper {
   }
 
   @override
-  StaticGet makeStaticGet(Member readTarget, Token token) {
-    return new ShadowStaticGet(readTarget)..fileOffset = offsetForToken(token);
+  StaticGet makeStaticGet(Member readTarget, Token token,
+      {String prefixName, int targetOffset: -1, Class targetClass}) {
+    return new ShadowStaticGet(
+        prefixName, targetOffset, targetClass, readTarget)
+      ..fileOffset = offsetForToken(token);
+  }
+
+  @override
+  Expression wrapInDeferredCheck(
+      Expression expression, PrefixBuilder prefix, int charOffset) {
+    var check = new VariableDeclaration.forValue(
+        new CheckLibraryIsLoaded(prefix.dependency))
+      ..fileOffset = charOffset;
+    return new ShadowDeferredCheck(check, expression);
   }
 }
 

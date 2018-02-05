@@ -44,7 +44,9 @@ import '../quote.dart' show unescapeString;
 
 import 'source_library_builder.dart' show SourceLibraryBuilder;
 
-import 'unhandled_listener.dart' show NullValue, Unhandled, UnhandledListener;
+import 'unhandled_listener.dart' show NullValue, UnhandledListener;
+
+import '../configuration.dart' show Configuration;
 
 enum MethodBody {
   Abstract,
@@ -57,12 +59,6 @@ class OutlineBuilder extends UnhandledListener {
 
   final bool enableNative;
   final bool stringExpectedAfterNative;
-
-  /// When true, recoverable parser errors are silently ignored. This is
-  /// because they will be reported by the BodyBuilder later. However, typedefs
-  /// are fully compiled by the outline builder, so parser errors are turned on
-  /// when parsing typedefs.
-  bool silenceParserErrors = true;
 
   String nativeMethodName;
 
@@ -149,7 +145,7 @@ class OutlineBuilder extends UnhandledListener {
   void endExport(Token exportKeyword, Token semicolon) {
     debugEvent("Export");
     List<Combinator> combinators = pop();
-    Unhandled conditionalUris = pop();
+    List<Configuration> conditionalUris = pop();
     int uriOffset = popCharOffset();
     String uri = pop();
     List<MetadataBuilder> metadata = pop();
@@ -177,13 +173,36 @@ class OutlineBuilder extends UnhandledListener {
     bool isDeferred = pop();
     int prefixOffset = pop();
     String prefix = pop(NullValue.Prefix);
-    Unhandled conditionalUris = pop();
+    List<Configuration> configurations = pop();
     int uriOffset = popCharOffset();
-    String uri = pop();
+    String uri = pop(); // For a conditional import, this is the default URI.
     List<MetadataBuilder> metadata = pop();
-    library.addImport(metadata, uri, conditionalUris, prefix, combinators,
+    library.addImport(metadata, uri, configurations, prefix, combinators,
         isDeferred, importKeyword.charOffset, prefixOffset, uriOffset);
     checkEmpty(importKeyword.charOffset);
+  }
+
+  @override
+  void endConditionalUris(int count) {
+    debugEvent("EndConditionalUris");
+    push(popList(count) ?? NullValue.ConditionalUris);
+  }
+
+  @override
+  void endConditionalUri(Token ifKeyword, Token leftParen, Token equalSign) {
+    debugEvent("EndConditionalUri");
+    int charOffset = popCharOffset();
+    String uri = pop();
+    if (equalSign != null) popCharOffset();
+    String condition = popIfNotNull(equalSign) ?? "true";
+    String dottedName = pop();
+    push(new Configuration(charOffset, dottedName, condition, uri));
+  }
+
+  @override
+  void handleDottedName(int count, Token firstIdentifier) {
+    debugEvent("DottedName");
+    push(popIdentifierList(count).join('.'));
   }
 
   @override
@@ -194,13 +213,6 @@ class OutlineBuilder extends UnhandledListener {
     pop(); // prefixOffset
     pop(NullValue.Prefix); // prefix
     pop(); // conditionalUris
-  }
-
-  @override
-  void handleRecoverExpression(Token token, Message message) {
-    debugEvent("RecoverExpression");
-    push(NullValue.Expression);
-    push(token.charOffset);
   }
 
   @override
@@ -404,7 +416,7 @@ class OutlineBuilder extends UnhandledListener {
   }
 
   @override
-  void beginTopLevelMethod(Token token, Token name) {
+  void beginTopLevelMethod(Token lastConsumed) {
     library.beginNestedDeclaration("#method", hasMembers: false);
   }
 
@@ -487,7 +499,7 @@ class OutlineBuilder extends UnhandledListener {
   }
 
   @override
-  void beginMethod(Token token, Token name) {
+  void beginMethod() {
     library.beginNestedDeclaration("#method", hasMembers: false);
   }
 
@@ -779,7 +791,6 @@ class OutlineBuilder extends UnhandledListener {
   @override
   void beginFunctionTypeAlias(Token token) {
     library.beginNestedDeclaration("#typedef", hasMembers: false);
-    silenceParserErrors = false;
   }
 
   @override
@@ -859,7 +870,6 @@ class OutlineBuilder extends UnhandledListener {
     library.addFunctionTypeAlias(documentationComment, metadata, name,
         typeVariables, functionType, charOffset);
     checkEmpty(typedefKeyword.charOffset);
-    silenceParserErrors = true;
   }
 
   @override
@@ -927,7 +937,7 @@ class OutlineBuilder extends UnhandledListener {
   }
 
   @override
-  void beginFactoryMethod(Token token) {
+  void beginFactoryMethod(Token lastConsumed) {
     library.beginNestedDeclaration("#factory_method", hasMembers: false);
   }
 
@@ -1045,18 +1055,12 @@ class OutlineBuilder extends UnhandledListener {
   }
 
   @override
-  void handleRecoverableError(
-      Message message, Token startToken, Token endToken) {
-    if (silenceParserErrors) {
-      debugEvent("RecoverableError");
-    } else {
-      super.handleRecoverableError(message, startToken, endToken);
-    }
+  void addCompileTimeError(Message message, int charOffset, int length) {
+    library.addCompileTimeError(message, charOffset, uri);
   }
 
-  @override
-  void addCompileTimeError(Message message, int offset, int length) {
-    library.addCompileTimeError(message, offset, uri);
+  void addProblem(Message message, int charOffset, int length) {
+    library.addProblem(message, charOffset, uri);
   }
 
   /// Return the documentation comment for the entity that starts at the

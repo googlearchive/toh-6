@@ -27,7 +27,8 @@ FunctionType substituteTypeParams(
               named.name, substitution.substituteType(named.type)))
           .toList(),
       typeParameters: newTypeParameters,
-      requiredParameterCount: type.requiredParameterCount);
+      requiredParameterCount: type.requiredParameterCount,
+      typedefReference: type.typedefReference);
 }
 
 /// Given a [FunctionType], gets the type of the named parameter with the given
@@ -81,28 +82,6 @@ class TypeSchemaEnvironment extends TypeEnvironment {
   /// Modify the given [constraint]'s upper bound to include [upper].
   void addUpperBound(TypeConstraint constraint, DartType upper) {
     constraint.upper = getGreatestLowerBound(constraint.upper, upper);
-  }
-
-  /// Implements the function "flatten" defined in the spec, where T is [type]:
-  ///
-  ///     If T = Future<S> then flatten(T) = flatten(S).
-  ///
-  ///     Otherwise if T <: Future then let S be a type such that T << Future<S>
-  ///     and for all R, if T << Future<R> then S << R.  Then flatten(T) = S.
-  ///
-  ///     In any other circumstance, flatten(T) = T.
-  DartType flattenFutures(DartType type) {
-    if (type is InterfaceType) {
-      if (identical(type.classNode, coreTypes.futureClass)) {
-        return flattenFutures(type.typeArguments[0]);
-      }
-      InterfaceType futureBase =
-          hierarchy.getTypeAsInstanceOf(type, coreTypes.futureClass);
-      if (futureBase != null) {
-        return futureBase.typeArguments[0];
-      }
-    }
-    return type;
   }
 
   /// Computes the greatest lower bound of [type1] and [type2].
@@ -368,48 +347,6 @@ class TypeSchemaEnvironment extends TypeEnvironment {
     }
 
     // TODO(paulberry): report any errors from instantiateToBounds.
-  }
-
-  /// Given a [DartType] [type], if [type] is an uninstantiated
-  /// parameterized type then instantiate the parameters to their
-  /// bounds. See the issue for the algorithm description.
-  ///
-  /// https://github.com/dart-lang/sdk/issues/27526#issuecomment-260021397
-  ///
-  /// TODO(paulberry) Compute lazily and cache.
-  DartType instantiateToBounds(DartType type,
-      {Map<TypeParameter, DartType> knownTypes}) {
-    List<TypeParameter> typeFormals = _typeFormalsAsParameters(type);
-    int count = typeFormals.length;
-    if (count == 0) {
-      return type;
-    }
-    var substitution = <TypeParameter, DartType>{};
-    for (TypeParameter parameter in typeFormals) {
-      // Note: we treat class<T extends Object> as equivalent to class<T>; in
-      // both cases they instantiate to class<dynamic>.  See dartbug.com/29561
-      if (_isObjectOrDynamic(parameter.bound)) {
-        substitution[parameter] = const DynamicType();
-      } else {
-        substitution[parameter] = parameter.bound;
-      }
-    }
-    if (knownTypes != null) {
-      type = substitute(type, knownTypes);
-    }
-    var result = substituteDeep(type, substitution);
-    if (result != null) return result;
-
-    // Instantiation failed due to a circularity.
-    // TODO(paulberry): report the error.
-    // Substitute `dynamic` for all parameters to try to allow compilation to
-    // continue.  Note that [substituteDeep] is destructive of the
-    // [substitution] so we create a fresh one.
-    substitution = <TypeParameter, DartType>{};
-    for (TypeParameter parameter in typeFormals) {
-      substitution[parameter] = const DynamicType();
-    }
-    return substitute(type, substitution);
   }
 
   @override
@@ -733,18 +670,6 @@ class TypeSchemaEnvironment extends TypeEnvironment {
       type is DynamicType ||
       (type is InterfaceType &&
           identical(type.classNode, coreTypes.objectClass));
-
-  /// Given a [type], returns the [TypeParameter]s corresponding to its formal
-  /// type parameters (if any).
-  List<TypeParameter> _typeFormalsAsParameters(DartType type) {
-    if (type is TypedefType) {
-      return type.typedefNode.typeParameters;
-    } else if (type is InterfaceType) {
-      return type.classNode.typeParameters;
-    } else {
-      return const [];
-    }
-  }
 
   DartType _typeParameterLeastUpperBound(DartType type1, DartType type2) {
     // This currently just implements a simple least upper bound to

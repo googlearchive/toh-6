@@ -750,6 +750,11 @@ class AnalysisEngine {
   static const String ANALYSIS_OPTIONS_YAML_FILE = 'analysis_options.yaml';
 
   /**
+   * The file name used for pubspec files.
+   */
+  static const String PUBSPEC_YAML_FILE = 'pubspec.yaml';
+
+  /**
    * The unique instance of this class.
    */
   static final AnalysisEngine instance = new AnalysisEngine._();
@@ -1292,6 +1297,11 @@ abstract class AnalysisOptions {
   bool get preserveComments;
 
   /**
+   * Return `true` if analyzer should enable the use of Dart 2.0 features.
+   */
+  bool get previewDart2;
+
+  /**
    * Return the opaque signature of the options.
    *
    * The length of the list is guaranteed to equal [signatureLength].
@@ -1461,6 +1471,9 @@ class AnalysisOptionsImpl implements AnalysisOptions {
   bool useFastaParser = false;
 
   @override
+  bool previewDart2 = false;
+
+  @override
   bool disableCacheFlushing = false;
 
   /**
@@ -1517,6 +1530,7 @@ class AnalysisOptionsImpl implements AnalysisOptions {
     preserveComments = options.preserveComments;
     strongMode = options.strongMode;
     useFastaParser = options.useFastaParser;
+    previewDart2 = options.previewDart2;
     if (options is AnalysisOptionsImpl) {
       declarationCasts = options.declarationCasts;
       strongModeHints = options.strongModeHints;
@@ -1651,6 +1665,7 @@ class AnalysisOptionsImpl implements AnalysisOptions {
       buffer.addBool(implicitDynamic);
       buffer.addBool(strongMode);
       buffer.addBool(strongModeHints);
+      buffer.addBool(useFastaParser);
 
       // Append error processors.
       buffer.addInt(errorProcessors.length);

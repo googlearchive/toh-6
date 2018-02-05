@@ -4,10 +4,10 @@
 
 import 'dart:async';
 
-import 'package:front_end/compilation_message.dart';
-import 'package:front_end/byte_store.dart';
-import 'package:front_end/compiler_options.dart';
-import 'package:front_end/file_system.dart';
+import 'package:front_end/src/api_prototype/compilation_message.dart';
+import 'package:front_end/src/api_prototype/byte_store.dart';
+import 'package:front_end/src/api_prototype/compiler_options.dart';
+import 'package:front_end/src/api_prototype/file_system.dart';
 import 'package:front_end/src/base/performance_logger.dart';
 import 'package:front_end/src/fasta/fasta_codes.dart';
 import 'package:front_end/src/fasta/problems.dart' show unimplemented;
@@ -15,8 +15,7 @@ import 'package:front_end/src/fasta/severity.dart';
 import 'package:front_end/src/fasta/ticker.dart';
 import 'package:front_end/src/fasta/uri_translator.dart';
 import 'package:front_end/src/fasta/uri_translator_impl.dart';
-import 'package:front_end/src/multi_root_file_system.dart';
-import 'package:kernel/kernel.dart' show Program, CanonicalName;
+import 'package:kernel/kernel.dart' show CanonicalName, Location, Program;
 import 'package:kernel/target/targets.dart';
 import 'package:kernel/target/vm.dart';
 import 'package:package_config/packages.dart' show Packages;
@@ -28,6 +27,10 @@ import 'package:front_end/src/fasta/command_line_reporting.dart'
     as command_line_reporting;
 
 import 'package:kernel/binary/ast_from_binary.dart' show BinaryBuilder;
+
+import '../fasta/messages.dart' show getLocation;
+
+import '../fasta/deprecated_problems.dart' show deprecated_InputError;
 
 import 'libraries_specification.dart';
 
@@ -159,9 +162,32 @@ class ProcessedOptions {
     return _raw.byteStore;
   }
 
-  bool get _reportMessages => _raw.reportMessages ?? (_raw.onError == null);
+  bool get _reportMessages {
+    return _raw.onProblem == null &&
+        (_raw.reportMessages ?? (_raw.onError == null));
+  }
 
   void report(LocatedMessage message, Severity severity) {
+    if (_raw.onProblem != null) {
+      int offset = message.charOffset;
+      Uri uri = message.uri;
+      Location location = offset == -1 ? null : getLocation(uri, offset);
+      _raw.onProblem(
+          message,
+          severity,
+          command_line_reporting.format(message, severity, location: location),
+          location?.line ?? -1,
+          location?.column ?? -1);
+      if (command_line_reporting.shouldThrowOn(severity)) {
+        if (verbose) print(StackTrace.current);
+        throw new deprecated_InputError(
+            uri,
+            offset,
+            "Compilation aborted due to fatal "
+            "${command_line_reporting.severityName(severity)}.");
+      }
+      return;
+    }
     if (_raw.onError != null) {
       _raw.onError(new _CompilationMessage(message, severity));
     }
@@ -170,6 +196,23 @@ class ProcessedOptions {
   }
 
   void reportWithoutLocation(Message message, Severity severity) {
+    if (_raw.onProblem != null) {
+      _raw.onProblem(
+          message.withLocation(null, -1),
+          severity,
+          command_line_reporting.formatWithoutLocation(message, severity),
+          -1,
+          -1);
+      if (command_line_reporting.shouldThrowOn(severity)) {
+        if (verbose) print(StackTrace.current);
+        throw new deprecated_InputError(
+            null,
+            -1,
+            "Compilation aborted due to fatal "
+            "${command_line_reporting.severityName(severity)}.");
+      }
+      return;
+    }
     if (_raw.onError != null) {
       _raw.onError(
           new _CompilationMessage(message.withLocation(null, -1), severity));
@@ -236,10 +279,11 @@ class ProcessedOptions {
 
   /// Get the [FileSystem] which should be used by the front end to access
   /// files.
-  ///
-  /// If the client supplied roots using [CompilerOptions.multiRoots], the
-  /// returned [FileSystem] will automatically perform the appropriate mapping.
   FileSystem get fileSystem => _fileSystem ??= _createFileSystem();
+
+  /// Clear the file system so any CompilerOptions fileSystem change will have
+  /// effect.
+  void clearFileSystemCache() => _fileSystem = null;
 
   /// Whether to interpret Dart sources in strong-mode.
   bool get strongMode => _raw.strongMode;
@@ -494,16 +538,10 @@ class ProcessedOptions {
 
   /// Create a [FileSystem] specific to the current options.
   ///
-  /// If `_raw.multiRoots` is not empty, the file-system will implement the
-  /// semantics of multiple roots. If [chaseDependencies] is false, the
-  /// resulting file system will be hermetic.
+  /// If [chaseDependencies] is false, the resulting file system will be
+  /// hermetic.
   FileSystem _createFileSystem() {
     var result = _raw.fileSystem;
-    // Note: hermetic checks are done before translating multi-root URIs, so
-    // the order in which we create the file systems below is relevant.
-    if (!_raw.multiRoots.isEmpty) {
-      result = new MultiRootFileSystem('multi-root', _raw.multiRoots, result);
-    }
     if (!chaseDependencies) {
       var allInputs = inputs.toSet();
       allInputs.addAll(_raw.inputSummaries);
@@ -550,7 +588,6 @@ class ProcessedOptions {
 
     writeList('Input Summaries', _raw.inputSummaries);
     writeList('Linked Dependencies', _raw.linkedDependencies);
-    writeList('Multiroots', _raw.multiRoots);
 
     sb.writeln('Modular: ${_modularApi}');
     sb.writeln('Hermetic: ${!chaseDependencies} (provided: '

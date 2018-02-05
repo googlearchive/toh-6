@@ -5,6 +5,7 @@
 import 'package:analyzer/analyzer.dart';
 import 'package:analyzer/dart/ast/token.dart' show Token;
 import 'package:analyzer/src/dart/error/syntactic_errors.dart';
+import 'package:front_end/src/api_prototype/compilation_message.dart';
 import 'package:front_end/src/fasta/messages.dart' show Code, Message;
 
 /// An error reporter that knows how to convert a Fasta error into an analyzer
@@ -17,10 +18,8 @@ class FastaErrorReporter {
   /// [errorReporter].
   FastaErrorReporter(this.errorReporter);
 
-  /// Report an error based on the given [message] whose range is described by
-  /// the given [offset] and [length].
-  void reportMessage(Message message, int offset, int length) {
-    Code code = message.code;
+  void reportByCode(
+      String analyzerCode, int offset, int length, Message message) {
     Map<String, dynamic> arguments = message.arguments;
 
     String stringOrTokenLexeme() {
@@ -34,7 +33,7 @@ class FastaErrorReporter {
       return text;
     }
 
-    switch (code.analyzerCode) {
+    switch (analyzerCode) {
       case "ABSTRACT_CLASS_MEMBER":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.ABSTRACT_CLASS_MEMBER, offset, length);
@@ -151,6 +150,10 @@ class FastaErrorReporter {
             offset,
             length);
         return;
+      case "EXPECTED_CLASS_MEMBER":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.EXPECTED_CLASS_MEMBER, offset, length);
+        return;
       case "EXPECTED_EXECUTABLE":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.EXPECTED_EXECUTABLE, offset, length);
@@ -232,6 +235,10 @@ class FastaErrorReporter {
         errorReporter?.reportErrorForOffset(
             StaticWarningCode.FINAL_NOT_INITIALIZED, offset, length, [name]);
         return;
+      case "FUNCTION_TYPED_PARAMETER_VAR":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.FUNCTION_TYPED_PARAMETER_VAR, offset, length);
+        return;
       case "GETTER_WITH_PARAMETERS":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.GETTER_WITH_PARAMETERS, offset, length);
@@ -267,9 +274,37 @@ class FastaErrorReporter {
             offset,
             length);
         return;
-      case "INVALID_MODIFIER_ON_SETTER":
+      case "INVALID_CAST_FUNCTION":
         errorReporter?.reportErrorForOffset(
-            CompileTimeErrorCode.INVALID_MODIFIER_ON_SETTER, offset, length);
+            StrongModeCode.INVALID_CAST_FUNCTION, offset, length);
+        return;
+      case "INVALID_CAST_FUNCTION_EXPR":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_CAST_FUNCTION_EXPR, offset, length);
+        return;
+      case "INVALID_CAST_LITERAL_LIST":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_CAST_LITERAL_LIST, offset, length);
+        return;
+      case "INVALID_CAST_LITERAL_MAP":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_CAST_LITERAL_MAP, offset, length);
+        return;
+      case "INVALID_CAST_METHOD":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_CAST_METHOD, offset, length);
+        return;
+      case "INVALID_CAST_NEW_EXPR":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_CAST_NEW_EXPR, offset, length);
+        return;
+      case "INVALID_METHOD_OVERRIDE":
+        errorReporter?.reportErrorForOffset(
+            StrongModeCode.INVALID_METHOD_OVERRIDE, offset, length);
+        return;
+      case "INVALID_MODIFIER_ON_SETTER":
+        _reportByCode(CompileTimeErrorCode.INVALID_MODIFIER_ON_SETTER, message,
+            offset, length);
         return;
       case "INVALID_OPERATOR":
         String text = stringOrTokenLexeme();
@@ -277,8 +312,8 @@ class FastaErrorReporter {
             ParserErrorCode.INVALID_OPERATOR, offset, length, [text]);
         return;
       case "INVALID_OPERATOR_FOR_SUPER":
-        errorReporter?.reportErrorForOffset(
-            ParserErrorCode.INVALID_OPERATOR_FOR_SUPER, offset, length);
+        _reportByCode(ParserErrorCode.INVALID_OPERATOR_FOR_SUPER, message,
+            offset, length);
         return;
       case "LIBRARY_DIRECTIVE_NOT_FIRST":
         errorReporter?.reportErrorForOffset(
@@ -360,6 +395,10 @@ class FastaErrorReporter {
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.NAMED_FUNCTION_EXPRESSION, offset, length);
         return;
+      case "NAMED_PARAMETER_OUTSIDE_GROUP":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.NAMED_PARAMETER_OUTSIDE_GROUP, offset, length);
+        return;
       case "NATIVE_CLAUSE_SHOULD_BE_ANNOTATION":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.NATIVE_CLAUSE_SHOULD_BE_ANNOTATION, offset, length);
@@ -375,6 +414,12 @@ class FastaErrorReporter {
       case "PREFIX_AFTER_COMBINATOR":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.PREFIX_AFTER_COMBINATOR, offset, length);
+        return;
+      case "REDIRECTION_IN_NON_FACTORY_CONSTRUCTOR":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.REDIRECTION_IN_NON_FACTORY_CONSTRUCTOR,
+            offset,
+            length);
         return;
       case "RETURN_IN_GENERATOR":
         errorReporter?.reportErrorForOffset(
@@ -396,6 +441,14 @@ class FastaErrorReporter {
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.STATIC_OPERATOR, offset, length);
         return;
+      case "SWITCH_HAS_CASE_AFTER_DEFAULT_CASE":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.SWITCH_HAS_CASE_AFTER_DEFAULT_CASE, offset, length);
+        return;
+      case "SWITCH_HAS_MULTIPLE_DEFAULT_CASES":
+        errorReporter?.reportErrorForOffset(
+            ParserErrorCode.SWITCH_HAS_MULTIPLE_DEFAULT_CASES, offset, length);
+        return;
       case "TOP_LEVEL_OPERATOR":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.TOP_LEVEL_OPERATOR, offset, length);
@@ -403,6 +456,18 @@ class FastaErrorReporter {
       case "TYPEDEF_IN_CLASS":
         errorReporter?.reportErrorForOffset(
             ParserErrorCode.TYPEDEF_IN_CLASS, offset, length);
+        return;
+      case "UNDEFINED_GETTER":
+        errorReporter?.reportErrorForOffset(
+            StaticTypeWarningCode.UNDEFINED_GETTER, offset, length);
+        return;
+      case "UNDEFINED_METHOD":
+        errorReporter?.reportErrorForOffset(
+            StaticTypeWarningCode.UNDEFINED_METHOD, offset, length);
+        return;
+      case "UNDEFINED_SETTER":
+        errorReporter?.reportErrorForOffset(
+            StaticTypeWarningCode.UNDEFINED_SETTER, offset, length);
         return;
       case "UNEXPECTED_TOKEN":
         String text = stringOrTokenLexeme();
@@ -457,5 +522,60 @@ class FastaErrorReporter {
       default:
       // fall through
     }
+  }
+
+  void reportCompilationMessage(CompilationMessage message) {
+    String errorCodeStr = message.analyzerCode;
+    ErrorCode errorCode = _getErrorCode(errorCodeStr);
+    if (errorCode != null) {
+      errorReporter.reportError(new AnalysisError.forValues(
+          errorReporter.source,
+          message.span.start.offset,
+          message.span.length,
+          errorCode,
+          message.message,
+          message.tip));
+    } else {
+      // TODO(mfairhurst) throw here, and fail all tests that trip this.
+    }
+  }
+
+  /// Report an error based on the given [message] whose range is described by
+  /// the given [offset] and [length].
+  void reportMessage(Message message, int offset, int length) {
+    Code code = message.code;
+
+    reportByCode(code.analyzerCode, offset, length, message);
+  }
+
+  void _reportByCode(
+      ErrorCode errorCode, Message message, int offset, int length) {
+    if (errorReporter != null) {
+      errorReporter.reportError(new AnalysisError.forValues(
+          errorReporter.source,
+          offset,
+          length,
+          errorCode,
+          message.message,
+          null));
+    }
+  }
+
+  /// Return the [ErrorCode] for the given [shortName], or `null` if not found.
+  static ErrorCode _getErrorCode(String shortName) {
+    const prefixes = const {
+      CompileTimeErrorCode: 'CompileTimeErrorCode',
+      ParserErrorCode: 'ParserErrorCode',
+      StaticTypeWarningCode: 'StaticTypeWarningCode',
+      StaticWarningCode: 'StaticWarningCode'
+    };
+    for (var prefix in prefixes.values) {
+      var uniqueName = '$prefix.$shortName';
+      var errorCode = errorCodeByUniqueName(uniqueName);
+      if (errorCode != null) {
+        return errorCode;
+      }
+    }
+    return null;
   }
 }

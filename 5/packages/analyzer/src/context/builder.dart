@@ -32,8 +32,9 @@ import 'package:analyzer/src/lint/registry.dart';
 import 'package:analyzer/src/services/lint.dart';
 import 'package:analyzer/src/summary/summary_sdk.dart';
 import 'package:analyzer/src/task/options.dart';
+import 'package:analyzer/src/util/sdk.dart';
 import 'package:args/args.dart';
-import 'package:front_end/byte_store.dart';
+import 'package:front_end/src/api_prototype/byte_store.dart';
 import 'package:front_end/src/base/performance_logger.dart';
 import 'package:package_config/packages.dart';
 import 'package:package_config/packages_file.dart';
@@ -130,9 +131,14 @@ class ContextBuilder {
   FileContentOverlay fileContentOverlay;
 
   /**
-   * Whether to enable the Dart 2.0 Front End.
+   * Whether to enable the Dart 2.0 preview.
    */
   bool previewDart2 = false;
+
+  /**
+   * Whether to enable the Dart 2.0 Common Front End implementation.
+   */
+  bool useCFE = false;
 
   /**
    * Initialize a newly created builder to be ready to build a context rooted in
@@ -151,9 +157,10 @@ class ContextBuilder {
   AnalysisContext buildContext(String path) {
     InternalAnalysisContext context =
         AnalysisEngine.instance.createAnalysisContext();
-    AnalysisOptions options = getAnalysisOptions(path);
+    AnalysisOptionsImpl options = getAnalysisOptions(path);
     context.contentCache = contentCache;
     context.sourceFactory = createSourceFactory(path, options);
+    options.previewDart2 = previewDart2;
     context.analysisOptions = options;
     context.name = path;
     //_processAnalysisOptions(context, optionMap);
@@ -171,6 +178,19 @@ class ContextBuilder {
         getAnalysisOptions(path, contextRoot: contextRoot);
     //_processAnalysisOptions(context, optionMap);
     final sf = createSourceFactory(path, options);
+
+    // The folder with `vm_platform_strong.dill`, which has required patches.
+    Folder kernelPlatformFolder;
+    if (useCFE) {
+      DartSdk sdk = sf.dartSdk;
+      if (sdk is FolderBasedDartSdk) {
+        var binariesPath = computePlatformBinariesPath(sdk.directory.path);
+        if (binariesPath != null) {
+          kernelPlatformFolder = resourceProvider.getFolder(binariesPath);
+        }
+      }
+    }
+
     AnalysisDriver driver = new AnalysisDriver(
         analysisDriverScheduler,
         performanceLog,
@@ -180,7 +200,8 @@ class ContextBuilder {
         contextRoot,
         sf,
         options,
-        enableKernelDriver: previewDart2);
+        enableKernelDriver: useCFE,
+        kernelPlatformFolder: kernelPlatformFolder);
     // temporary plugin support:
     if (onCreateAnalysisDriver != null) {
       onCreateAnalysisDriver(driver, analysisDriverScheduler, performanceLog,
