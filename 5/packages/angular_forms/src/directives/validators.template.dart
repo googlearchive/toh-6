@@ -10,11 +10,9 @@ export 'validators.dart';
 import 'package:angular/angular.dart';
 import '../model.dart' show AbstractControl;
 import '../validators.dart' show Validators, NG_VALIDATORS;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 import '../validators.template.dart' as _ref1;
 import 'package:angular/angular.template.dart' as _ref2;
-
 import 'package:angular/src/core/change_detection/directive_change_detector.dart' as import0;
 import 'validators.dart' as import1;
 import 'package:angular/src/core/linker/app_view.dart';
@@ -52,6 +50,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

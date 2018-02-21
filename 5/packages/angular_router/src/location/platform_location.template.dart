@@ -8,7 +8,6 @@
 import 'platform_location.dart';
 export 'platform_location.dart';
 import 'dart:html';
-// No initReflector() linking required.
 
-// No initReflector() needed.
+// No initReflector() linking required.
 void initReflector() {}

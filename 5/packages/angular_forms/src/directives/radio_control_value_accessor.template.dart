@@ -9,10 +9,9 @@ import 'radio_control_value_accessor.dart';
 export 'radio_control_value_accessor.dart';
 import 'dart:html';
 import 'dart:js_util' as js_util;
-import 'package:angular/angular.dart' show Directive, Injectable, Injector, Input, OnInit, OnDestroy, Provider;
+import 'package:angular/angular.dart' show Directive, Injectable, Injector, Input, OnInit, OnDestroy, Provider, Visibility;
 import 'control_value_accessor.dart' show NG_VALUE_ACCESSOR, ControlValueAccessor;
 import 'ng_control.dart' show NgControl;
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'control_value_accessor.template.dart' as _ref0;
 import 'ng_control.template.dart' as _ref1;
@@ -24,11 +23,9 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(RadioControlRegistry, () => new RadioControlRegistry());
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
-  _ngRef.registerFactory(
-    RadioControlRegistry,
-    () => new RadioControlRegistry(),
-  );
 }

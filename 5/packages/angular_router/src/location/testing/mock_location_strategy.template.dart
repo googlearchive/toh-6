@@ -8,9 +8,9 @@
 import 'mock_location_strategy.dart';
 export 'mock_location_strategy.dart';
 import 'dart:async';
+import 'dart:html' show EventListener, PopStateEvent;
 import 'package:angular/angular.dart' show Injectable;
 import 'package:angular_router/src/location/location_strategy.dart' show LocationStrategy;
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'package:angular/angular.template.dart' as _ref0;
 import 'package:angular_router/src/location/location_strategy.template.dart' as _ref1;
@@ -21,10 +21,8 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(MockLocationStrategy, () => new MockLocationStrategy());
   _ref0.initReflector();
   _ref1.initReflector();
-  _ngRef.registerFactory(
-    MockLocationStrategy,
-    () => new MockLocationStrategy(),
-  );
 }

@@ -9,7 +9,6 @@ import 'route_path.dart';
 export 'route_path.dart';
 import 'route_definition.dart';
 import 'url.dart';
-// Required for initReflector().
 import 'route_definition.template.dart' as _ref0;
 import 'url.template.dart' as _ref1;
 
@@ -19,6 +18,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
 }

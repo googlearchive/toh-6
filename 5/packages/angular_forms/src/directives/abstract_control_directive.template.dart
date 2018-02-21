@@ -8,7 +8,6 @@
 import 'abstract_control_directive.dart';
 export 'abstract_control_directive.dart';
 import '../model.dart' show AbstractControl;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 
 var _visited = false;
@@ -17,5 +16,6 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
 }

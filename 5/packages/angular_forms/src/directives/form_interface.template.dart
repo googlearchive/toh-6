@@ -10,7 +10,6 @@ export 'form_interface.dart';
 import '../model.dart' show Control, ControlGroup;
 import 'ng_control.dart' show NgControl;
 import 'ng_control_group.dart' show NgControlGroup;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 import 'ng_control.template.dart' as _ref1;
 import 'ng_control_group.template.dart' as _ref2;
@@ -21,6 +20,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

@@ -9,7 +9,6 @@ import 'angular_forms.dart';
 export 'angular_forms.dart';
 import 'src/directives/radio_control_value_accessor.dart' show RadioControlRegistry;
 import 'src/form_builder.dart' show FormBuilder;
-// Required for initReflector().
 import 'src/directives.template.dart' as _ref0;
 import 'src/directives/radio_control_value_accessor.template.dart' as _ref1;
 import 'src/form_builder.template.dart' as _ref2;
@@ -23,6 +22,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

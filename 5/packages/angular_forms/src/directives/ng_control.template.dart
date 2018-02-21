@@ -10,7 +10,6 @@ export 'ng_control.dart';
 import 'abstract_control_directive.dart' show AbstractControlDirective;
 import 'control_value_accessor.dart' show ControlValueAccessor;
 import 'validators.dart' show ValidatorFn;
-// Required for initReflector().
 import 'abstract_control_directive.template.dart' as _ref0;
 import 'control_value_accessor.template.dart' as _ref1;
 import 'validators.template.dart' as _ref2;
@@ -21,6 +20,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

@@ -10,7 +10,6 @@ export 'form_builder.dart';
 import 'package:angular/angular.dart' show Injectable;
 import 'directives/validators.dart';
 import 'model.dart' as model_module;
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'directives/validators.template.dart' as _ref0;
 import 'model.template.dart' as _ref1;
@@ -22,11 +21,9 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(FormBuilder, () => new FormBuilder());
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
-  _ngRef.registerFactory(
-    FormBuilder,
-    () => new FormBuilder(),
-  );
 }

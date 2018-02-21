@@ -10,7 +10,6 @@ export 'router_hook.dart';
 import 'dart:async';
 import 'router/navigation_params.dart';
 import 'router/router_state.dart';
-// Required for initReflector().
 import 'router/navigation_params.template.dart' as _ref0;
 import 'router/router_state.template.dart' as _ref1;
 
@@ -20,6 +19,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
 }

@@ -9,7 +9,6 @@ import 'lifecycle.dart';
 export 'lifecycle.dart';
 import 'dart:async';
 import 'router/router_state.dart';
-// Required for initReflector().
 import 'router/router_state.template.dart' as _ref0;
 
 var _visited = false;
@@ -18,5 +17,6 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
 }

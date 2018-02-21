@@ -8,10 +8,9 @@
 import 'select_control_value_accessor.dart';
 export 'select_control_value_accessor.dart';
 import 'dart:html';
-import 'package:angular/angular.dart' show Directive, Provider, ElementRef, Input, OnDestroy, Host, Optional;
+import 'package:angular/angular.dart' show Directive, Provider, ElementRef, Input, OnDestroy, Host, Optional, Visibility;
 import 'package:angular/src/facade/lang.dart' show isPrimitive;
 import 'control_value_accessor.dart' show NG_VALUE_ACCESSOR, ControlValueAccessor;
-// Required for initReflector().
 import 'control_value_accessor.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 import 'package:angular/src/facade/lang.template.dart' as _ref2;
@@ -22,6 +21,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

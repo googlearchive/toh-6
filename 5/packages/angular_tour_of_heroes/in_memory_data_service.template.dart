@@ -14,7 +14,6 @@ import 'package:angular/angular.dart';
 import 'package:http/http.dart';
 import 'package:http/testing.dart';
 import 'src/hero.dart';
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'package:angular/angular.template.dart' as _ref0;
 import 'src/hero.template.dart' as _ref1;
@@ -25,10 +24,8 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(InMemoryDataService, () => new InMemoryDataService());
   _ref0.initReflector();
   _ref1.initReflector();
-  _ngRef.registerFactory(
-    InMemoryDataService,
-    () => new InMemoryDataService(),
-  );
 }

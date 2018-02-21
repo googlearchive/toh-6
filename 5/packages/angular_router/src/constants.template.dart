@@ -14,7 +14,6 @@ import 'directives/router_outlet_directive.dart';
 import 'location.dart';
 import 'router/router.dart';
 import 'router/router_impl.dart';
-// Required for initReflector().
 import 'directives/router_link_active_directive.template.dart' as _ref0;
 import 'directives/router_link_directive.template.dart' as _ref1;
 import 'directives/router_outlet_directive.template.dart' as _ref2;
@@ -29,6 +28,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

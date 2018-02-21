@@ -9,9 +9,8 @@ import 'default_value_accessor.dart';
 export 'default_value_accessor.dart';
 import 'dart:html';
 import 'dart:js_util' as js_util;
-import 'package:angular/angular.dart' show Directive, Provider;
+import 'package:angular/angular.dart' show Directive, Provider, Visibility;
 import 'control_value_accessor.dart';
-// Required for initReflector().
 import 'control_value_accessor.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 
@@ -21,6 +20,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
 }

@@ -9,7 +9,7 @@ import 'ng_form_model.dart';
 export 'ng_form_model.dart';
 import 'dart:async';
 import 'dart:html' show Event;
-import 'package:angular/angular.dart' show Directive, Inject, Input, AfterChanges, Optional, Output, Provider, Self;
+import 'package:angular/angular.dart' show Directive, Inject, Input, AfterChanges, Optional, Output, Provider, Self, Visibility;
 import '../model.dart' show Control, ControlGroup;
 import '../validators.dart' show Validators, NG_VALIDATORS;
 import 'control_container.dart' show ControlContainer;
@@ -17,7 +17,6 @@ import 'form_interface.dart' show Form;
 import 'ng_control.dart' show NgControl;
 import 'ng_control_group.dart';
 import 'shared.dart' show setUpControl, setUpControlGroup, composeValidators;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 import '../validators.template.dart' as _ref1;
 import 'control_container.template.dart' as _ref2;
@@ -33,6 +32,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

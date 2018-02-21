@@ -19,7 +19,6 @@ import 'directives/number_value_accessor.dart' show NumberValueAccessor;
 import 'directives/radio_control_value_accessor.dart' show RadioControlValueAccessor;
 import 'directives/select_control_value_accessor.dart' show SelectControlValueAccessor, NgSelectOption;
 import 'directives/validators.dart' show RequiredValidator, MinLengthValidator, MaxLengthValidator, PatternValidator;
-// Required for initReflector().
 import 'directives/abstract_control_directive.template.dart' as _ref0;
 import 'directives/checkbox_value_accessor.template.dart' as _ref1;
 import 'directives/checkbox_value_accessor.template.dart' as _ref2;
@@ -58,6 +57,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

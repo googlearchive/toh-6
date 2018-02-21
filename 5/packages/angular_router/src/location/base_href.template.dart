@@ -8,7 +8,6 @@
 import 'base_href.dart';
 export 'base_href.dart';
 import 'dart:html';
-// No initReflector() linking required.
 
-// No initReflector() needed.
+// No initReflector() linking required.
 void initReflector() {}

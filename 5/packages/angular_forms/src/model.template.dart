@@ -10,7 +10,6 @@ export 'model.dart';
 import 'dart:async';
 import 'package:meta/meta.dart';
 import 'directives/validators.dart' show ValidatorFn;
-// Required for initReflector().
 import 'directives/validators.template.dart' as _ref0;
 
 var _visited = false;
@@ -19,5 +18,6 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
 }

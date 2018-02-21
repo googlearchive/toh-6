@@ -15,7 +15,6 @@ import '../router/router.dart';
 import '../router/router_outlet_token.dart';
 import '../router/router_state.dart';
 import '../router_hook.dart';
-// Required for initReflector().
 import '../lifecycle.template.dart' as _ref0;
 import '../route_definition.template.dart' as _ref1;
 import '../router/router.template.dart' as _ref2;
@@ -30,6 +29,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

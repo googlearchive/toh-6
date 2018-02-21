@@ -8,9 +8,8 @@
 import 'number_value_accessor.dart';
 export 'number_value_accessor.dart';
 import 'dart:html';
-import 'package:angular/angular.dart' show Directive, Provider;
+import 'package:angular/angular.dart' show Directive, Provider, Visibility;
 import 'control_value_accessor.dart' show ChangeFunction, ControlValueAccessor, NG_VALUE_ACCESSOR, TouchFunction;
-// Required for initReflector().
 import 'control_value_accessor.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 
@@ -20,6 +19,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
 }

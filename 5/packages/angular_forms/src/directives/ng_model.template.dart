@@ -8,14 +8,13 @@
 import 'ng_model.dart';
 export 'ng_model.dart';
 import 'dart:async';
-import 'package:angular/angular.dart' show AfterChanges, ComponentState, Directive, Inject, Input, OnInit, Optional, Output, Provider, Self;
+import 'package:angular/angular.dart' show AfterChanges, ComponentState, Directive, Inject, Input, OnInit, Optional, Output, Provider, Self, Visibility;
 import '../model.dart' show Control;
 import '../validators.dart' show NG_VALIDATORS;
 import 'control_value_accessor.dart' show ControlValueAccessor, NG_VALUE_ACCESSOR;
 import 'ng_control.dart' show NgControl;
 import 'shared.dart' show setUpControl, selectValueAccessor, composeValidators;
 import 'validators.dart' show ValidatorFn;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 import '../validators.template.dart' as _ref1;
 import 'control_value_accessor.template.dart' as _ref2;
@@ -30,6 +29,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

@@ -11,7 +11,6 @@ import 'dart:html';
 import 'package:angular/angular.dart' show Injectable;
 import 'base_href.dart' as base_href;
 import 'platform_location.dart';
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'base_href.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
@@ -23,11 +22,9 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(BrowserPlatformLocation, () => new BrowserPlatformLocation());
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
-  _ngRef.registerFactory(
-    BrowserPlatformLocation,
-    () => new BrowserPlatformLocation(),
-  );
 }

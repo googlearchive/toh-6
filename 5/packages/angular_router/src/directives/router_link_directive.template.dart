@@ -14,13 +14,11 @@ import '../location.dart' show Location;
 import '../router/navigation_params.dart';
 import '../router/router.dart';
 import '../url.dart';
-// Required for initReflector().
 import '../location.template.dart' as _ref0;
 import '../router/navigation_params.template.dart' as _ref1;
 import '../router/router.template.dart' as _ref2;
 import '../url.template.dart' as _ref3;
 import 'package:angular/angular.template.dart' as _ref4;
-
 import 'package:angular/src/core/change_detection/directive_change_detector.dart' as import0;
 import 'router_link_directive.dart' as import1;
 import 'package:angular/src/core/linker/app_view.dart';
@@ -45,6 +43,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

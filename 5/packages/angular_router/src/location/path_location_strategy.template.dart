@@ -12,12 +12,12 @@ import 'package:angular/angular.dart' show Injectable, Inject, Optional;
 import 'location.dart' show Location;
 import 'location_strategy.dart' show LocationStrategy, APP_BASE_HREF;
 import 'platform_location.dart' show PlatformLocation;
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'location.template.dart' as _ref0;
 import 'location_strategy.template.dart' as _ref1;
 import 'package:angular/angular.template.dart' as _ref2;
 import 'platform_location.template.dart' as _ref3;
+import 'package:angular_router/src/location/platform_location.dart' as _i1;
 
 var _visited = false;
 void initReflector() {
@@ -25,24 +25,14 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(PathLocationStrategy, (_i1.PlatformLocation p0, String p1) => new PathLocationStrategy(p0, p1));
+  _ngRef.registerDependencies(PathLocationStrategy, const [
+    const [_i1.PlatformLocation],
+    const [const _ngRef.Inject(const _ngRef.OpaqueToken<dynamic>('appBaseHref')), const _ngRef.Optional()]
+  ]);
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
   _ref3.initReflector();
-  _ngRef.registerFactory(
-    PathLocationStrategy,
-    (PlatformLocation p0, String p1) => new PathLocationStrategy(p0, p1),
-  );
-  _ngRef.registerDependencies(
-    PathLocationStrategy,
-    const [
-      const [
-        PlatformLocation,
-      ],
-      const [
-        const _ngRef.Inject(const _ngRef.OpaqueToken<dynamic>(r'appBaseHref')),
-        const _ngRef.Optional(),
-      ],
-    ],
-  );
 }

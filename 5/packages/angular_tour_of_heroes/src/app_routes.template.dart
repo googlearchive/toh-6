@@ -12,7 +12,6 @@ import 'package:angular_router/angular_router.dart';
 import 'dashboard_component.template.dart' as dct;
 import 'hero_detail_component.template.dart' as hdct;
 import 'heroes_component.template.dart' as hct;
-// Required for initReflector().
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'dashboard_component.template.dart' as _ref0;
 import 'hero_detail_component.template.dart' as _ref1;
@@ -26,13 +25,11 @@ void initReflector() {
     return;
   }
   _visited = true;
+
+  _ngRef.registerFactory(AppRoutes, () => new AppRoutes());
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
   _ref3.initReflector();
   _ref4.initReflector();
-  _ngRef.registerFactory(
-    AppRoutes,
-    () => new AppRoutes(),
-  );
 }

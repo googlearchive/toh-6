@@ -21,7 +21,6 @@ import 'number_value_accessor.dart' show NumberValueAccessor;
 import 'radio_control_value_accessor.dart' show RadioControlValueAccessor;
 import 'select_control_value_accessor.dart' show SelectControlValueAccessor;
 import 'validators.dart' show ValidatorFn;
-// Required for initReflector().
 import '../model.template.dart' as _ref0;
 import '../validators.template.dart' as _ref1;
 import 'abstract_control_directive.template.dart' as _ref2;
@@ -43,6 +42,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();

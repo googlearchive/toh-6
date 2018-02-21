@@ -8,7 +8,6 @@
 import 'normalize_validator.dart';
 export 'normalize_validator.dart';
 import 'validators.dart' show Validator, ValidatorFn;
-// Required for initReflector().
 import 'validators.template.dart' as _ref0;
 
 var _visited = false;
@@ -17,5 +16,6 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
 }

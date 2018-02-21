@@ -13,7 +13,6 @@ import 'package:angular_tour_of_heroes/app_component.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:http/http.dart';
 import 'main.template.dart' as ng;
-// Required for initReflector().
 import 'main.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 import 'package:angular_router/angular_router.template.dart' as _ref2;
@@ -26,6 +25,7 @@ void initReflector() {
     return;
   }
   _visited = true;
+
   _ref0.initReflector();
   _ref1.initReflector();
   _ref2.initReflector();
