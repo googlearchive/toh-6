@@ -32,7 +32,7 @@ void main() {
 
   setUp(() async {
     fixture = await testBed.create();
-    po = await fixture.resolvePageObject(DashboardPO);
+    po = await new DashboardPO().resolve(fixture);
   });
 
   tearDown(disposeAnyRunningTest);
@@ -49,7 +49,7 @@ void main() {
   test('select hero and navigate to detail', () async {
     clearInteractions(mockRouter);
     await po.selectHero(3);
-    var c = verify(mockRouter.navigate(captureAny, captureAny));
+    var c = verify(mockRouter.navigate(typed(captureAny), typed(captureAny)));
     expect(c.captured[0], '/detail/15');
     expect(c.captured[1], new IsNavParams());
     expect(c.captured.length, 2);
@@ -72,8 +72,8 @@ void heroSearchTests() {
 
   setUp(() async {
     await po.search.type('ma');
-    await new Future.delayed(const Duration(seconds: 1));
-    po = await fixture.resolvePageObject(DashboardPO);
+    // await new Future.delayed(const Duration(seconds: 1)); // still needed?
+    po = await new DashboardPO().resolve(fixture);
   });
 
   test('list matching heroes', () async {

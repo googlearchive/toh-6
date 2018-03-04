@@ -31,7 +31,7 @@ void main() {
   setUp(() async {
     InMemoryDataService.resetDb();
     fixture = await testBed.create();
-    po = await fixture.resolvePageObject(HeroSearchPO);
+    po = await new HeroSearchPO().resolve(fixture);
   });
 
   tearDown(disposeAnyRunningTest);
@@ -72,7 +72,7 @@ void heroSearchTests() {
   test('select hero and navigate to detail', () async {
     clearInteractions(mockRouter);
     await po.selectHero(0);
-    final c = verify(mockRouter.navigate(captureAny));
+    final c = verify(mockRouter.navigate(typed(captureAny)));
     expect(c.captured.single, '/detail/15');
   });
 }
@@ -82,5 +82,5 @@ Future _typeSearchTextAndRefreshPO(String searchText) async {
   await fixture.update((c) => firstHero = c.heroes.first);
   await po.search.type(searchText);
   await firstHero;
-  po = await fixture.resolvePageObject(HeroSearchPO);
+  po = await new HeroSearchPO().resolve(fixture);
 }

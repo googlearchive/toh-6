@@ -11,7 +11,7 @@ import 'hero_service.dart';
   selector: 'hero-detail',
   templateUrl: 'hero_detail_component.html',
   styleUrls: const ['hero_detail_component.css'],
-  directives: const [CORE_DIRECTIVES, formDirectives],
+  directives: const [coreDirectives, formDirectives],
 )
 class HeroDetailComponent implements OnActivate {
   Hero hero;

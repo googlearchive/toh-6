@@ -34,7 +34,7 @@ void main() {
   setUp(() async {
     InMemoryDataService.resetDb();
     fixture = await testBed.create();
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
   });
 
   tearDown(disposeAnyRunningTest);
@@ -63,7 +63,7 @@ void basicTests() {
 void selectedHeroTests() {
   setUp(() async {
     await po.selectHero(targetHeroIndex);
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
   });
 
   test('is selected', () async {
@@ -77,13 +77,14 @@ void selectedHeroTests() {
 
   test('go to detail', () async {
     await po.gotoDetail();
-    final c = verify(mockRouter.navigate(captureAny));
+    await fixture.update();
+    final c = verify(mockRouter.navigate(typed(captureAny)));
     expect(c.captured.single, '/detail/${targetHero['id']}');
   });
 
   test('select another hero', () async {
     await po.selectHero(0);
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
     final heroData = {'id': 11, 'name': 'Mr. Nice'};
     expect(await po.selectedHero, heroData);
   });
@@ -94,7 +95,7 @@ void addHeroTests() {
 
   setUp(() async {
     await po.addHero(newHeroName);
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
   });
 
   test('hero count', () async {
@@ -103,7 +104,7 @@ void addHeroTests() {
 
   test('select new hero', () async {
     await po.selectHero(numHeroes);
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
     expect(po.heroes.length, numHeroes + 1);
     expect((await po.selectedHero)['name'], newHeroName);
     expect(await po.myHeroNameInUppercase, equalsIgnoringCase(newHeroName));
@@ -117,7 +118,7 @@ void deleteHeroTests() {
     heroesWithoutTarget = await inIndexOrder(po.heroes).toList()
       ..removeAt(targetHeroIndex);
     await po.deleteHero(targetHeroIndex);
-    po = await fixture.resolvePageObject(HeroesPO);
+    po = await new HeroesPO().resolve(fixture);
   });
 
   test('hero count', () async {

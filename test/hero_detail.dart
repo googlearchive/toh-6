@@ -52,7 +52,7 @@ void main() {
 
     setUp(() async {
       await fixture.update((c) => c.onActivate(null, mockRouterState));
-      po = await fixture.resolvePageObject(HeroDetailPO);
+      po = await new HeroDetailPO().resolve(fixture);
       clearInteractions(mockLocation);
     });
 
@@ -82,6 +82,7 @@ void main() {
 
       test('save changes and go back', () async {
         await po.save();
+        await fixture.update();
         final name = InMemoryDataService.lookUpName(targetHero['id']);
         expect(name, updatedHero['name']);
       });

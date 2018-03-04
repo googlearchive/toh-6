@@ -3,23 +3,23 @@ import 'dart:async';
 import 'package:pageloader/objects.dart';
 import 'utils.dart';
 
-class HeroDetailPO {
+class HeroDetailPO extends PageObjectBase {
   @FirstByCss('div h2')
-  PageLoaderElement _title; // e.g. 'Mr Freeze details!'
+  PageLoaderElement get _title => q('div h2'); // e.g. 'Mr Freeze details!'
 
   @FirstByCss('div div')
-  PageLoaderElement _id;
+  PageLoaderElement get _id => q('div div');
 
   @ByTagName('input')
-  PageLoaderElement _input;
+  PageLoaderElement get _input => q('input');
 
   @ByTagName('button')
   @WithVisibleText('Back')
-  PageLoaderElement _back;
+  PageLoaderElement get _back => q('button', withVisibleText: 'Back');
 
   @ByTagName('button')
   @WithVisibleText('Save')
-  PageLoaderElement _save;
+  PageLoaderElement get _save => q('button', withVisibleText: 'Save');
 
   Future<Map> get heroFromDetails async {
     if (_id == null) return null;

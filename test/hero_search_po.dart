@@ -3,15 +3,16 @@ import 'dart:async';
 import 'package:pageloader/objects.dart';
 import 'utils.dart';
 
-class HeroSearchPO {
+class HeroSearchPO extends PageObjectBase {
   @FirstByCss('h4')
-  PageLoaderElement _title;
+  PageLoaderElement get _title => q('h4');
 
   @ByTagName('input')
-  PageLoaderElement search;
+  PageLoaderElement get search => q('input');
 
   @ByCss('div[id="search-component"] div div')
-  List<PageLoaderElement> _heroes; // heroes found
+  List<PageLoaderElement> get _heroes =>
+      qq('div[id="search-component"] div div'); // heroes found
 
   Future<String> get title => _title.visibleText;
 
