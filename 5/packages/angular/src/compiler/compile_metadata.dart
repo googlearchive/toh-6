@@ -11,6 +11,13 @@ import 'compiler_utils.dart';
 import 'output/output_ast.dart' as o;
 import 'selector.dart' show CssSelector;
 
+// TODO: Remove the following lines (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: invalid_assignment
+// ignore_for_file: list_element_type_not_assignable
+// ignore_for_file: non_bool_operand
+// ignore_for_file: return_of_invalid_type
+
 // group 1: 'property' from '[property]'
 // group 2: 'event' from '(event)'
 var HOST_REG_EXP = new RegExp(r'^(?:(?:\[([^\]]+)\])|(?:\(([^\)]+)\)))$');
@@ -87,7 +94,7 @@ class CompileProviderMetadata {
   bool multi;
 
   // TODO(matanl): Refactor to avoid two fields for multi-providers.
-  CompileTypeMetadata multiType;
+  CompileTypeMetadata typeArgument;
 
   /// Restricts where the provider is injectable.
   final Visibility visibility;
@@ -101,7 +108,7 @@ class CompileProviderMetadata {
     this.deps,
     this.visibility: Visibility.all,
     bool multi,
-    this.multiType,
+    this.typeArgument,
   })
       : this.multi = multi == true;
 
@@ -288,7 +295,7 @@ class CompileTypeMetadata
   List<CompileDiDependencyMetadata> diDeps;
 
   @override
-  List<o.OutputType> get genericTypes => const [];
+  final List<o.OutputType> genericTypes;
 
   CompileTypeMetadata(
       {this.name,
@@ -296,6 +303,7 @@ class CompileTypeMetadata
       this.prefix,
       bool isHost,
       this.value,
+      this.genericTypes: const [],
       List<CompileDiDependencyMetadata> diDeps})
       : this.isHost = isHost == true,
         this.diDeps = diDeps ?? const [];
@@ -328,6 +336,7 @@ class CompileTypeMetadata
       'isHost:$isHost,\n'
       'value:$value,\n'
       'diDeps:$diDeps,\n'
+      'genericTypes:$genericTypes\n'
       '}';
 }
 
@@ -349,8 +358,8 @@ class CompileQueryMetadata {
   /// Whether this is typed `dart:html`'s `Element` (or a sub-type).
   final bool isElementType;
 
-  /// Whether this is typed `dart:core`'s `List`.
-  final bool isListType;
+  /// Whether this is typed specifically `QueryList`.
+  final bool isQueryListType;
 
   /// Optional type to read for given match.
   ///
@@ -365,7 +374,7 @@ class CompileQueryMetadata {
     this.first: false,
     this.propertyName,
     this.isElementType: false,
-    this.isListType: false,
+    this.isQueryListType: false,
     this.read,
   });
 }

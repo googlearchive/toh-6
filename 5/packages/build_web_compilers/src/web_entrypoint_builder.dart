@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:analyzer/analyzer.dart';
 import 'package:build/build.dart';
+import 'package:build_modules/build_modules.dart';
 
 import 'common.dart';
 import 'dart2js_bootstrap.dart';
@@ -23,10 +24,16 @@ enum WebCompiler {
 
 /// The top level keys supported for the `options` config for the
 /// [WebEntrypointBuilder].
-const _supportedOptions = const [_compiler, _dart2jsArgs, _buildRootAppSummary];
+const _supportedOptions = const [
+  _compiler,
+  _dart2jsArgs,
+  _buildRootAppSummary,
+  _ignoreCastFailures
+];
 const _buildRootAppSummary = 'build_root_app_summary';
 const _compiler = 'compiler';
 const _dart2jsArgs = 'dart2js_args';
+const _ignoreCastFailures = 'ignore_cast_failures';
 
 /// A builder which compiles entrypoints for the web.
 ///
@@ -36,11 +43,13 @@ class WebEntrypointBuilder implements Builder {
   final List<String> dart2JsArgs;
   final bool buildRootAppSummary;
   final bool useKernel;
+  final bool ignoreCastFailures;
 
   const WebEntrypointBuilder(this.webCompiler,
       {this.dart2JsArgs: const [],
       this.useKernel: false,
-      this.buildRootAppSummary: false});
+      this.buildRootAppSummary: false,
+      this.ignoreCastFailures: true});
 
   factory WebEntrypointBuilder.fromOptions(BuilderOptions options) {
     validateOptions(
@@ -48,6 +57,8 @@ class WebEntrypointBuilder implements Builder {
     var compilerOption = options.config[_compiler] as String ?? 'dartdevc';
     var buildRootAppSummary =
         options.config[_buildRootAppSummary] as bool ?? false;
+    var ignoreCastFailures =
+        options.config[_ignoreCastFailures] as bool ?? true;
     WebCompiler compiler;
     switch (compilerOption) {
       case 'dartdevc':
@@ -61,7 +72,8 @@ class WebEntrypointBuilder implements Builder {
             'Only `dartdevc` and `dart2js` are supported.');
     }
 
-    var dart2JsArgs = options.config[_dart2jsArgs] ?? <String>[];
+    var dart2JsArgs =
+        options.config[_dart2jsArgs] ?? const <String>['--minify'];
     if (dart2JsArgs is! List<String>) {
       throw new ArgumentError.value(dart2JsArgs, _dart2jsArgs,
           'Expected a list of strings, but got a ${dart2JsArgs.runtimeType}:');
@@ -69,7 +81,8 @@ class WebEntrypointBuilder implements Builder {
 
     return new WebEntrypointBuilder(compiler,
         dart2JsArgs: dart2JsArgs as List<String>,
-        buildRootAppSummary: buildRootAppSummary);
+        buildRootAppSummary: buildRootAppSummary,
+        ignoreCastFailures: ignoreCastFailures);
   }
 
   @override
@@ -87,8 +100,14 @@ class WebEntrypointBuilder implements Builder {
     var isAppEntrypoint = await _isAppEntryPoint(dartEntrypointId, buildStep);
     if (!isAppEntrypoint) return;
     if (webCompiler == WebCompiler.DartDevc) {
-      await bootstrapDdc(buildStep,
-          useKernel: useKernel, buildRootAppSummary: buildRootAppSummary);
+      try {
+        await bootstrapDdc(buildStep,
+            useKernel: useKernel,
+            buildRootAppSummary: buildRootAppSummary,
+            ignoreCastFailures: ignoreCastFailures);
+      } on MissingModulesException catch (e) {
+        log.severe('$e');
+      }
     } else if (webCompiler == WebCompiler.Dart2Js) {
       await bootstrapDart2Js(buildStep, dart2JsArgs);
     }

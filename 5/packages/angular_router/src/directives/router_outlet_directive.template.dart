@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -9,6 +7,7 @@ import 'router_outlet_directive.dart';
 export 'router_outlet_directive.dart';
 import 'dart:async';
 import 'package:angular/angular.dart';
+import 'package:angular/src/runtime.dart';
 import '../lifecycle.dart';
 import '../route_definition.dart';
 import '../router/router.dart';
@@ -22,6 +21,7 @@ import '../router/router_outlet_token.template.dart' as _ref3;
 import '../router/router_state.template.dart' as _ref4;
 import '../router_hook.template.dart' as _ref5;
 import 'package:angular/angular.template.dart' as _ref6;
+import 'package:angular/src/runtime.template.dart' as _ref7;
 
 var _visited = false;
 void initReflector() {
@@ -37,4 +37,5 @@ void initReflector() {
   _ref4.initReflector();
   _ref5.initReflector();
   _ref6.initReflector();
+  _ref7.initReflector();
 }

@@ -21,7 +21,6 @@ import 'package:angular/src/facade/lang.dart';
 import 'package:angular/src/platform/browser/exceptions.dart';
 import 'package:angular/src/platform/dom/events/dom_events.dart';
 import 'package:angular/src/platform/dom/events/event_manager.dart';
-import 'package:angular/src/platform/dom/events/hammer_gestures.dart';
 import 'package:angular/src/platform/dom/events/key_events.dart';
 import 'package:angular/src/security/dom_sanitization_service.dart';
 import 'package:angular/src/security/dom_sanitization_service_impl.dart';
@@ -49,7 +48,6 @@ List<EventManagerPlugin> createEventPlugins() {
   return [
     new DomEventsPlugin(),
     new KeyEventsPlugin(),
-    new HammerGesturesPlugin(new HammerGestureConfig()),
   ];
 }
 
@@ -77,8 +75,8 @@ const bootstrapMinimalModule = const <Object>[
 ];
 
 /// An experimental application [Injector] that is statically generated.
-@Injector.generate(const [bootstrapMinimalModule])
-Injector minimalApp([Injector parent]) => ng.minimalApp$Injector(parent);
+@GenerateInjector(const [bootstrapMinimalModule])
+final InjectorFactory minimalApp = ng.minimalApp$Injector;
 
 /// Returns the current [Document] of the browser.
 HtmlDocument getDocument() => document;

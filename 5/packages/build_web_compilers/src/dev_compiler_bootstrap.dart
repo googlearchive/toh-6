@@ -16,9 +16,10 @@ import 'web_entrypoint_builder.dart';
 _p.Context get p => _p.url;
 
 Future<Null> bootstrapDdc(BuildStep buildStep,
-    {bool useKernel, bool buildRootAppSummary}) async {
+    {bool useKernel, bool buildRootAppSummary, bool ignoreCastFailures}) async {
   useKernel ??= false;
   buildRootAppSummary ??= false;
+  ignoreCastFailures ??= true;
   var dartEntrypointId = buildStep.inputId;
   var moduleId = buildStep.inputId.changeExtension(moduleExtension);
   var module = new Module.fromJson(JSON
@@ -69,7 +70,8 @@ Future<Null> bootstrapDdc(BuildStep buildStep,
   bootstrapContent.write(_dartLoaderSetup(modulePaths));
   bootstrapContent.write(_requireJsConfig);
 
-  bootstrapContent.write(_appBootstrap(appModuleName, appModuleScope));
+  bootstrapContent
+      .write(_appBootstrap(appModuleName, appModuleScope, ignoreCastFailures));
 
   var bootstrapId = dartEntrypointId.changeExtension(ddcBootstrapExtension);
   await buildStep.writeAsString(bootstrapId, bootstrapContent.toString());
@@ -81,10 +83,6 @@ Future<Null> bootstrapDdc(BuildStep buildStep,
   await buildStep.writeAsString(
       dartEntrypointId.changeExtension(jsEntrypointExtension),
       entrypointJsContent);
-  await buildStep.writeAsString(
-      dartEntrypointId.changeExtension(jsEntrypointSourceMapExtension),
-      '{"version":3,"sourceRoot":"","sources":[],"names":[],"mappings":"",'
-      '"file":""}');
 }
 
 /// Ensures that all transitive js modules for [module] are available and built.
@@ -99,8 +97,11 @@ Future<List<Module>> _ensureTransitiveModules(
   // Check that each module is readable, and warn otherwise.
   await Future.wait(jsModules.map((jsId) async {
     if (await reader.canRead(jsId)) return;
-    log.warning(
-        'Unable to read $jsId, check your console for compilation errors.');
+    var errorsId = jsId.addExtension('.errors');
+    await reader.canRead(errorsId);
+    log.warning('Unable to read $jsId, check your console or the '
+        '`.dart_tool/build/generated/${errorsId.package}/${errorsId.path}` '
+        'log file.');
   }));
   return transitiveDeps;
 }
@@ -118,8 +119,11 @@ String _ddcModuleName(AssetId jsId) {
 /// `[moduleScope].main()` function on it.
 ///
 /// Also performs other necessary initialization.
-String _appBootstrap(String moduleName, String moduleScope) => '''
+String _appBootstrap(
+        String moduleName, String moduleScope, bool ignoreCastFailures) =>
+    '''
 require(["$moduleName", "dart_sdk"], function(app, dart_sdk) {
+  dart_sdk.dart.ignoreWhitelistedErrors($ignoreCastFailures);
   dart_sdk._isolate_helper.startRootIsolate(() => {}, []);
 $_initializeTools
   app.$moduleScope.main();
@@ -182,7 +186,7 @@ var _currentDirectory = (function () {
 
 /// Sets up `window.$dartLoader` based on [modulePaths].
 String _dartLoaderSetup(Map<String, String> modulePaths) => '''
-$_currentDirectoryScript
+$_baseUrlScript
 let modulePaths = ${const JsonEncoder.withIndent(" ").convert(modulePaths)};
 if(!window.\$dartLoader) {
    window.\$dartLoader = {
@@ -192,13 +196,18 @@ if(!window.\$dartLoader) {
    };
 }
 let customModulePaths = {};
-window.\$dartLoader.rootDirectories.push(_currentDirectory);
+window.\$dartLoader.rootDirectories.push(window.location.origin + baseUrl);
 for (let moduleName of Object.getOwnPropertyNames(modulePaths)) {
   let modulePath = modulePaths[moduleName];
   if (modulePath != moduleName) {
     customModulePaths[moduleName] = modulePath;
   }
-  var src = _currentDirectory + modulePath + '.js';
+  var src = window.location.origin + '/' + modulePath + '.js';
+  // dartdevc only strips the final extension when adding modules to source
+  // maps, so we need to do the same.
+  if (moduleName != 'dart_sdk') {
+    moduleName += '${p.withoutExtension(jsModuleExtension)}';
+  }
   if (window.\$dartLoader.moduleIdToUrl.has(moduleName)) {
     continue;
   }
@@ -212,12 +221,14 @@ for (let moduleName of Object.getOwnPropertyNames(modulePaths)) {
 ///
 /// Posts a message to the window when done.
 final _initializeTools = '''
+$_baseUrlScript
   dart_sdk._debugger.registerDevtoolsFormatter();
   if (window.\$dartStackTraceUtility && !window.\$dartStackTraceUtility.ready) {
     window.\$dartStackTraceUtility.ready = true;
     let dart = dart_sdk.dart;
     window.\$dartStackTraceUtility.setSourceMapProvider(
       function(url) {
+        url = url.replace(baseUrl, '/');
         var module = window.\$dartLoader.urlToModuleId.get(url);
         if (!module) return null;
         return dart.getSourceMap(module);
@@ -246,10 +257,16 @@ final _requireJsConfig = '''
     if (e.originalError && e.originalError.srcElement) {
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-          console.error(this.responseText);
+        if (this.readyState == 4) {
+          var message;
+          if (this.status == 200) {
+            message = this.responseText;
+          } else {
+            message = "Unknown error loading " + e.originalError.srcElement.src;
+          }
+          console.error(message);
           var errorEvent = new CustomEvent(
-            'dartLoadException', { detail: this.responseText });
+            'dartLoadException', { detail: message });
           window.dispatchEvent(errorEvent);
         }
       };

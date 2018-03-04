@@ -1,13 +1,11 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
 import 'ng_control_group.dart';
 export 'ng_control_group.dart';
-import 'package:angular/angular.dart' show Directive, Inject, Input, OnDestroy, OnInit, Optional, Provider, Self, SkipSelf, Visibility;
+import 'package:angular/angular.dart';
 import '../model.dart' show ControlGroup;
 import '../validators.dart' show NG_VALIDATORS;
 import 'control_container.dart' show ControlContainer;

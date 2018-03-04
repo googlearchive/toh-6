@@ -1,9 +1,12 @@
-import 'package:angular/core.dart' show DoCheck, Directive, Input, Visibility;
+import 'package:angular/core.dart' show DoCheck, Directive, Input;
 
 import '../../core/change_detection/differs/default_iterable_differ.dart'
     show DefaultIterableDiffer, CollectionChangeRecord, TrackByFn;
 import '../../core/linker.dart'
     show ViewContainerRef, ViewRef, TemplateRef, EmbeddedViewRef;
+
+// TODO: Remove the following line (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
 
 /// The `NgFor` directive instantiates a template once per item from an
 /// iterable. The context for each instantiated template inherits from the outer
@@ -90,7 +93,6 @@ import '../../core/linker.dart'
 /// [guide]: https://webdev.dartlang.org/angular/guide/template-syntax.html#ngFor
 @Directive(
   selector: '[ngFor][ngForOf]',
-  visibility: Visibility.local,
 )
 class NgFor implements DoCheck {
   final ViewContainerRef _viewContainer;

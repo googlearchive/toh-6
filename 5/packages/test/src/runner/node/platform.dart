@@ -80,10 +80,12 @@ class NodePlatform extends PlatformPlugin
     assert(platform == TestPlatform.nodeJS);
 
     var pair = await _loadChannel(path, platform, suiteConfig);
-    var controller = await deserializeSuite(path, platform, suiteConfig,
-        new PluginEnvironment(), pair.first, message,
-        mapper: pair.last);
-    return controller.suite;
+    var controller = deserializeSuite(path, platform, suiteConfig,
+        new PluginEnvironment(), pair.first, message);
+
+    controller.channel("test.node.mapper").sink.add(pair.last?.serialize());
+
+    return await controller.suite;
   }
 
   /// Loads a [StreamChannel] communicating with the test suite at [path].
@@ -94,29 +96,35 @@ class NodePlatform extends PlatformPlugin
       TestPlatform platform, SuiteConfiguration suiteConfig) async {
     var server = await MultiServerSocket.loopback(0);
 
-    var pair = await _spawnProcess(path, platform, suiteConfig, server.port);
-    var process = pair.first;
+    try {
+      var pair = await _spawnProcess(path, platform, suiteConfig, server.port);
+      var process = pair.first;
 
-    // Forward Node's standard IO to the print handler so it's associated with
-    // the load test.
-    //
-    // TODO(nweiz): Associate this with the current test being run, if any.
-    process.stdout.transform(lineSplitter).listen(print);
-    process.stderr.transform(lineSplitter).listen(print);
+      // Forward Node's standard IO to the print handler so it's associated with
+      // the load test.
+      //
+      // TODO(nweiz): Associate this with the current test being run, if any.
+      process.stdout.transform(lineSplitter).listen(print);
+      process.stderr.transform(lineSplitter).listen(print);
 
-    var socket = await server.first;
-    // TODO(nweiz): Remove the DelegatingStreamSink wrapper when sdk#31504 is
-    // fixed.
-    var channel = new StreamChannel(socket, new DelegatingStreamSink(socket))
-        .transform(new StreamChannelTransformer.fromCodec(UTF8))
-        .transform(chunksToLines)
-        .transform(jsonDocument)
-        .transformStream(new StreamTransformer.fromHandlers(handleDone: (sink) {
-      if (process != null) process.kill();
-      sink.close();
-    }));
+      var socket = await server.first;
+      // TODO(nweiz): Remove the DelegatingStreamSink wrapper when sdk#31504 is
+      // fixed.
+      var channel = new StreamChannel(socket, new DelegatingStreamSink(socket))
+          .transform(new StreamChannelTransformer.fromCodec(UTF8))
+          .transform(chunksToLines)
+          .transform(jsonDocument)
+          .transformStream(
+              new StreamTransformer.fromHandlers(handleDone: (sink) {
+        if (process != null) process.kill();
+        sink.close();
+      }));
 
-    return new Pair(channel, pair.last);
+      return new Pair(channel, pair.last);
+    } catch (_) {
+      server.close().catchError((_) {});
+      rethrow;
+    }
   }
 
   /// Spawns a Node.js process that loads the Dart test suite at [path].

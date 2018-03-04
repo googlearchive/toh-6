@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -18,6 +16,7 @@ import 'location_strategy.template.dart' as _ref1;
 import 'package:angular/angular.template.dart' as _ref2;
 import 'platform_location.template.dart' as _ref3;
 import 'package:angular_router/src/location/platform_location.dart' as _i1;
+import 'package:angular/src/core/di/opaque_token.dart' as _i2;
 
 var _visited = false;
 void initReflector() {
@@ -29,7 +28,7 @@ void initReflector() {
   _ngRef.registerFactory(PathLocationStrategy, (_i1.PlatformLocation p0, String p1) => new PathLocationStrategy(p0, p1));
   _ngRef.registerDependencies(PathLocationStrategy, const [
     const [_i1.PlatformLocation],
-    const [const _ngRef.Inject(const _ngRef.OpaqueToken<dynamic>('appBaseHref')), const _ngRef.Optional()]
+    const [const _ngRef.Inject(const _i2.OpaqueToken<dynamic>('appBaseHref')), const _ngRef.Optional()]
   ]);
   _ref0.initReflector();
   _ref1.initReflector();

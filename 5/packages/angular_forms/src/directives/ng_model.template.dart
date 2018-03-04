@@ -1,14 +1,12 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
 import 'ng_model.dart';
 export 'ng_model.dart';
 import 'dart:async';
-import 'package:angular/angular.dart' show AfterChanges, ComponentState, Directive, Inject, Input, OnInit, Optional, Output, Provider, Self, Visibility;
+import 'package:angular/angular.dart';
 import '../model.dart' show Control;
 import '../validators.dart' show NG_VALIDATORS;
 import 'control_value_accessor.dart' show ControlValueAccessor, NG_VALUE_ACCESSOR;

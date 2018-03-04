@@ -10,6 +10,8 @@ library angular.experimental;
 
 import 'dart:html';
 
+import 'package:angular/angular.dart';
+import 'package:angular/src/runtime.dart';
 import 'package:meta/meta.dart';
 
 import 'src/bootstrap/modules.dart';
@@ -49,7 +51,7 @@ Injector _platformInjector() {
 @experimental
 ComponentRef<T> bootstrapFactory<T>(
   ComponentFactory<T> factory, [
-  Injector createAppInjector(Injector parent),
+  InjectorFactory createAppInjector,
 ]) {
   final appInjector = createAppInjector == null
       ? minimalApp(_platformInjector())
@@ -69,13 +71,14 @@ ComponentRef<T> bootstrapFactory<T>(
 ComponentFactory<T> typeToFactory<T>(Object typeOrFactory) =>
     typeOrFactory is ComponentFactory<T>
         ? typeOrFactory
-        : reflector.getComponent(typeOrFactory);
+        : unsafeCast<ComponentFactory<T>>(
+            reflector.getComponent(unsafeCast<Type>(typeOrFactory)));
 
 /// Creates a root application injector by invoking [createAppInjector].
 ///
 /// ```dart
 /// main() {
-///   var injector = rootInjector((parent) {
+///   var injector = rootLegacyInjector((parent) {
 ///     return new Injector.map({ /* ... */ }, parent);
 ///   });
 /// }
@@ -88,6 +91,14 @@ Injector rootInjector(Injector createAppInjector(Injector parent)) {
   return createAppInjector(browserStaticPlatform().injector);
 }
 
+/// Create a root minimal application (no runtime providers) injector.
+///
+/// Unlike [rootInjector], this method does not rely on `initReflector`.
+///
+/// **WARNING**: This API is not considered part of the stable API.
+@experimental
+Injector rootMinimalInjector() => minimalApp(_platformInjector());
+
 /// Initializes the global application state from an application [injector].
 ///
 /// May be used in places that do not go through `bootstrap` to create an
@@ -97,7 +108,7 @@ Injector rootInjector(Injector createAppInjector(Injector parent)) {
 /// **WARNING**: This API is not considered part of the stable API.
 @experimental
 void initAngular(Injector injector) {
-  appViewUtils = injector.get(AppViewUtils);
+  appViewUtils = unsafeCast<AppViewUtils>(injector.get(AppViewUtils));
 }
 
 /// Returns `true` when AngularDart has modified the DOM.

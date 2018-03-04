@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -9,6 +7,7 @@ import 'application_ref.dart';
 export 'application_ref.dart';
 import 'dart:async';
 import 'dart:html';
+import 'package:angular/src/runtime.dart';
 import 'package:meta/meta.dart';
 import '../facade/exceptions.dart' show BaseException, ExceptionHandler;
 import '../facade/lang.dart' show assertionsEnabled;
@@ -38,9 +37,10 @@ import 'linker/app_view_utils.template.dart' as _ref8;
 import 'linker/component_factory.template.dart' as _ref9;
 import 'linker/component_resolver.template.dart' as _ref10;
 import 'linker/view_ref.template.dart' as _ref11;
-import 'render/api.template.dart' as _ref12;
-import 'testability/testability.template.dart' as _ref13;
-import 'zone/ng_zone.template.dart' as _ref14;
+import 'package:angular/src/runtime.template.dart' as _ref12;
+import 'render/api.template.dart' as _ref13;
+import 'testability/testability.template.dart' as _ref14;
+import 'zone/ng_zone.template.dart' as _ref15;
 import 'package:angular/src/core/application_ref.dart' as _i1;
 import 'package:angular/src/core/zone/ng_zone.dart' as _i2;
 import 'package:angular/src/di/injector/injector.dart' as _i3;
@@ -74,4 +74,5 @@ void initReflector() {
   _ref12.initReflector();
   _ref13.initReflector();
   _ref14.initReflector();
+  _ref15.initReflector();
 }

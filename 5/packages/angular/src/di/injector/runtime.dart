@@ -1,6 +1,9 @@
+import 'package:angular/src/runtime.dart';
+
 import '../../core/di/decorators.dart';
 import '../../core/di/opaque_token.dart';
 import '../../facade/lang.dart' show assertionsEnabled;
+import '../errors.dart' as errors;
 import '../providers.dart';
 import '../reflector.dart' as reflector;
 
@@ -89,7 +92,10 @@ class _RuntimeInjector extends HierarchicalInjector
   dynamic resolveAndInstantiate(dynamic providerOrType) {
     final provider = providerOrType is Provider
         ? providerOrType
-        : new Provider(providerOrType, useClass: providerOrType);
+        : new Provider(
+            providerOrType,
+            useClass: unsafeCast<Type>(providerOrType),
+          );
     return buildAtRuntime(provider, this);
   }
 
@@ -109,7 +115,14 @@ class _RuntimeInjector extends HierarchicalInjector
     final resolved = new List(deps.length);
     for (var i = 0, l = resolved.length; i < l; i++) {
       final dep = deps[i];
-      final result = dep is List ? _resolveMeta(dep) : inject(dep);
+      Object result;
+      if (dep is List) {
+        result = _resolveMeta(dep);
+      } else {
+        errors.debugInjectorEnter(dep);
+        result = inject(dep);
+        errors.debugInjectorLeave(dep);
+      }
       // We don't check to see if this failed otherwise, because this is an
       // edge case where we just delegate to Function.apply to invoke a factory.
       if (identical(result, throwIfNotFound)) {
@@ -154,6 +167,7 @@ class _RuntimeInjector extends HierarchicalInjector
     }
     // TODO(matanl): Assert that there is no invalid combination.
     Object result;
+    errors.debugInjectorEnter(token);
     final orElse = isOptional ? null : throwIfNotFound;
     if (isSkipSelf) {
       result = injectFromAncestryOptional(token, orElse);
@@ -167,6 +181,7 @@ class _RuntimeInjector extends HierarchicalInjector
     if (identical(result, throwIfNotFound)) {
       throwsNotFound(this, token);
     }
+    errors.debugInjectorLeave(token);
     return result;
   }
 
@@ -211,7 +226,7 @@ void _assertProviders(Iterable<Provider<Object>> providers) {
     } else if (provider.useFactory == noValueProvided &&
         provider.useExisting == null &&
         provider.token is Type) {
-      reflector.getFactory(provider.token);
+      reflector.getFactory(unsafeCast<Type>(provider.token));
     }
   }
 }

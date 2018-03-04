@@ -2,8 +2,8 @@ import 'package:angular/src/compiler/output/output_ast.dart';
 import 'package:angular/src/core/change_detection/change_detection.dart'
     show ChangeDetectionStrategy, isDefaultChangeDetectionStrategy;
 import 'package:angular/src/core/linker/view_type.dart';
-import 'package:angular_compiler/angular_compiler.dart';
 import 'package:angular/src/core/app_view_consts.dart' show namespaceUris;
+import 'package:angular_compiler/cli.dart';
 
 import '../compile_metadata.dart'
     show CompileDirectiveMetadata, CompileTypeMetadata;
@@ -58,9 +58,16 @@ import 'view_compiler_utils.dart'
         identifierFromTagName,
         ViewCompileDependency;
 
+// TODO: Remove the following lines (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: invalid_assignment
+// ignore_for_file: list_element_type_not_assignable
+// ignore_for_file: non_bool_operand
+// ignore_for_file: return_of_invalid_type
+
 var rootSelectorVar = o.variable("rootSelector");
 
-class ViewBuilderVisitor implements TemplateAstVisitor {
+class ViewBuilderVisitor implements TemplateAstVisitor<void, CompileElement> {
   final CompileView view;
   final Parser parser;
   final List<ViewCompileDependency> targetDependencies;
@@ -96,41 +103,34 @@ class ViewBuilderVisitor implements TemplateAstVisitor {
     }
   }
 
-  dynamic visitBoundText(BoundTextAst ast, dynamic context) {
-    CompileElement parent = context;
+  void visitBoundText(BoundTextAst ast, CompileElement parent) {
     int nodeIndex = view.nodes.length;
     NodeReference renderNode = view.createBoundTextNode(parent, nodeIndex, ast);
     var compileNode = new CompileNode(parent, view, nodeIndex, renderNode, ast);
     view.nodes.add(compileNode);
     _addRootNodeAndProject(compileNode, ast.ngContentIndex, parent);
-    return null;
   }
 
-  dynamic visitText(TextAst ast, dynamic context) {
-    CompileElement parent = context;
+  void visitText(TextAst ast, CompileElement parent) {
     int nodeIndex = view.nodes.length;
     NodeReference renderNode =
         view.createTextNode(parent, nodeIndex, ast.value, ast);
     var compileNode = new CompileNode(parent, view, nodeIndex, renderNode, ast);
     view.nodes.add(compileNode);
     _addRootNodeAndProject(compileNode, ast.ngContentIndex, parent);
-    return null;
   }
 
-  dynamic visitNgContent(NgContentAst ast, dynamic context) {
-    CompileElement parent = context;
+  void visitNgContent(NgContentAst ast, CompileElement parent) {
     view.projectNodesIntoElement(parent, ast.index, ast);
-    return null;
   }
 
-  dynamic visitElement(ElementAst ast, dynamic context) {
-    CompileElement parent = context;
+  void visitElement(ElementAst ast, CompileElement parent) {
     var nodeIndex = view.nodes.length;
 
     bool isHostRootView = nodeIndex == 0 && view.viewType == ViewType.HOST;
     NodeReference elementRef = isHostRootView
         ? new NodeReference.appViewRoot()
-        : new NodeReference(parent, nodeIndex, ast);
+        : new NodeReference(parent, nodeIndex);
 
     var directives = <CompileDirectiveMetadata>[];
     for (var dir in ast.directives) directives.add(dir.directive);
@@ -148,7 +148,6 @@ class ViewBuilderVisitor implements TemplateAstVisitor {
     } else {
       _visitHtmlElement(parent, nodeIndex, elementRef, directives, ast);
     }
-    return null;
   }
 
   void _visitComponentElement(
@@ -264,8 +263,7 @@ class ViewBuilderVisitor implements TemplateAstVisitor {
     compileElement.afterChildren(view.nodes.length - nodeIndex - 1);
   }
 
-  dynamic visitEmbeddedTemplate(EmbeddedTemplateAst ast, dynamic context) {
-    CompileElement parent = context;
+  void visitEmbeddedTemplate(EmbeddedTemplateAst ast, CompileElement parent) {
     // When logging updates, we need to create anchor as a field to be able
     // to update the comment, otherwise we can create simple local field.
     var nodeIndex = this.view.nodes.length;
@@ -315,41 +313,25 @@ class ViewBuilderVisitor implements TemplateAstVisitor {
     if (ast.hasDeferredComponent) {
       view.deferLoadEmbeddedTemplate(embeddedView, compileElement);
     }
-    return null;
   }
 
-  dynamic visitAttr(AttrAst ast, dynamic ctx) {
-    return null;
-  }
+  void visitAttr(AttrAst ast, CompileElement parent) {}
 
-  dynamic visitDirective(DirectiveAst ast, dynamic ctx) {
-    return null;
-  }
+  void visitDirective(DirectiveAst ast, CompileElement parent) {}
 
-  dynamic visitEvent(BoundEventAst ast, dynamic context) {
-    return null;
-  }
+  void visitEvent(BoundEventAst ast, CompileElement parent) {}
 
-  dynamic visitReference(ReferenceAst ast, dynamic ctx) {
-    return null;
-  }
+  void visitReference(ReferenceAst ast, CompileElement parent) {}
 
-  dynamic visitVariable(VariableAst ast, dynamic ctx) {
-    return null;
-  }
+  void visitVariable(VariableAst ast, CompileElement parent) {}
 
-  dynamic visitDirectiveProperty(
-      BoundDirectivePropertyAst ast, dynamic context) {
-    return null;
-  }
+  void visitDirectiveProperty(
+      BoundDirectivePropertyAst ast, CompileElement parent) {}
 
-  dynamic visitElementProperty(BoundElementPropertyAst ast, dynamic context) {
-    return null;
-  }
+  void visitElementProperty(
+      BoundElementPropertyAst ast, CompileElement parent) {}
 
-  dynamic visitProvider(ProviderAst ast, dynamic context) {
-    return null;
-  }
+  void visitProvider(ProviderAst ast, CompileElement parent) {}
 }
 
 o.Expression createStaticNodeDebugInfo(CompileNode node) {

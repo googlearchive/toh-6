@@ -11,7 +11,7 @@ import 'hero.dart';
   selector: 'hero-search',
   templateUrl: 'hero_search_component.html',
   styleUrls: const ['hero_search_component.css'],
-  directives: const [CORE_DIRECTIVES],
+  directives: const [coreDirectives],
   providers: const [HeroSearchService],
   pipes: const [COMMON_PIPES],
 )

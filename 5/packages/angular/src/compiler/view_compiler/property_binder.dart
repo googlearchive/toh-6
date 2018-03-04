@@ -238,7 +238,7 @@ void bindAndWriteToRenderer(
         }
         break;
       case PropertyBindingType.Attribute:
-        var attrNs;
+        String attrNs;
         String attrName = boundProp.name;
         if (attrName.startsWith('@') && attrName.contains(':')) {
           var nameParts = attrName.substring(1).split(':');

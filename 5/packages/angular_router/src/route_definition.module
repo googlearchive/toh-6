@@ -1,1 +1,1 @@
-{"p":["angular_router","lib/src/route_definition.dart"],"s":[["angular_router","lib/src/route_definition.dart"],["angular_router","lib/src/route_path.dart"]],"d":[["meta","lib/meta.dart"],["angular","lib/angular.dart"],["angular_router","lib/src/url.dart"]]}
+{"p":["angular_router","lib/src/route_definition.dart"],"s":[["angular_router","lib/src/route_definition.dart"],["angular_router","lib/src/route_path.dart"]],"d":[["meta","lib/meta.dart"],["angular","lib/angular.dart"],["angular","lib/src/runtime.dart"],["angular_router","lib/src/url.dart"]]}

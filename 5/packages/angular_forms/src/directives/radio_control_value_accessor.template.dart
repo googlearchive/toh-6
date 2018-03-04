@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -9,7 +7,7 @@ import 'radio_control_value_accessor.dart';
 export 'radio_control_value_accessor.dart';
 import 'dart:html';
 import 'dart:js_util' as js_util;
-import 'package:angular/angular.dart' show Directive, Injectable, Injector, Input, OnInit, OnDestroy, Provider, Visibility;
+import 'package:angular/angular.dart';
 import 'control_value_accessor.dart' show NG_VALUE_ACCESSOR, ControlValueAccessor;
 import 'ng_control.dart' show NgControl;
 import 'package:angular/src/di/reflector.dart' as _ngRef;

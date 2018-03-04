@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -48,9 +46,9 @@ class ViewHeroesComponent0 extends AppView<import2.HeroesComponent> {
   import3.ButtonElement _el_6;
   import3.UListElement _el_8;
   ViewContainer _appEl_9;
-  import5.NgFor _NgFor_9_7;
+  import5.NgFor _NgFor_9_9;
   ViewContainer _appEl_10;
-  NgIf _NgIf_10_7;
+  NgIf _NgIf_10_9;
   var _expr_0;
   import7.UpperCasePipe _pipe_uppercase_0;
   static RenderComponentType _renderType;
@@ -85,13 +83,13 @@ class ViewHeroesComponent0 extends AppView<import2.HeroesComponent> {
     var _anchor_9 = ngAnchor.clone(false);
     _el_8.append(_anchor_9);
     _appEl_9 = new ViewContainer(9, 8, this, _anchor_9);
-    TemplateRef _TemplateRef_9_6 = new TemplateRef(_appEl_9, viewFactory_HeroesComponent1);
-    _NgFor_9_7 = new import5.NgFor(_appEl_9, _TemplateRef_9_6);
+    TemplateRef _TemplateRef_9_8 = new TemplateRef(_appEl_9, viewFactory_HeroesComponent1);
+    _NgFor_9_9 = new import5.NgFor(_appEl_9, _TemplateRef_9_8);
     var _anchor_10 = ngAnchor.clone(false);
     parentRenderNode.append(_anchor_10);
     _appEl_10 = new ViewContainer(10, null, this, _anchor_10);
-    TemplateRef _TemplateRef_10_6 = new TemplateRef(_appEl_10, viewFactory_HeroesComponent2);
-    _NgIf_10_7 = new NgIf(_appEl_10, _TemplateRef_10_6);
+    TemplateRef _TemplateRef_10_8 = new TemplateRef(_appEl_10, viewFactory_HeroesComponent2);
+    _NgIf_10_9 = new NgIf(_appEl_10, _TemplateRef_10_8);
     _el_6.addEventListener('click', eventHandler1(_handle_click_6_0));
     _pipe_uppercase_0 = new import7.UpperCasePipe();
     init(const [], null);
@@ -103,11 +101,11 @@ class ViewHeroesComponent0 extends AppView<import2.HeroesComponent> {
     final import2.HeroesComponent _ctx = ctx;
     final currVal_0 = _ctx.heroes;
     if (!identical(_expr_0, currVal_0)) {
-      _NgFor_9_7.ngForOf = currVal_0;
+      _NgFor_9_9.ngForOf = currVal_0;
       _expr_0 = currVal_0;
     }
-    _NgFor_9_7.ngDoCheck();
-    _NgIf_10_7.ngIf = (_ctx.selectedHero != null);
+    _NgFor_9_9.ngDoCheck();
+    _NgIf_10_9.ngIf = (_ctx.selectedHero != null);
     _appEl_9.detectChangesInNestedViews();
     _appEl_10.detectChangesInNestedViews();
   }
@@ -254,31 +252,23 @@ const List<dynamic> styles$HeroesComponentHost = const [];
 
 class _ViewHeroesComponentHost0 extends AppView<dynamic> {
   ViewHeroesComponent0 _compView_0;
-  import2.HeroesComponent _HeroesComponent_0_4;
+  import2.HeroesComponent _HeroesComponent_0_5;
   _ViewHeroesComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import9.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewHeroesComponent0(this, 0);
     rootEl = _compView_0.rootEl;
-    _HeroesComponent_0_4 = new import2.HeroesComponent(this.injectorGet(import16.HeroService, viewData.parentIndex), this.injectorGet(import17.Router, viewData.parentIndex));
-    _compView_0.create(_HeroesComponent_0_4, projectableNodes);
+    _HeroesComponent_0_5 = new import2.HeroesComponent(this.injectorGet(import16.HeroService, viewData.parentIndex), this.injectorGet(import17.Router, viewData.parentIndex));
+    _compView_0.create(_HeroesComponent_0_5, projectableNodes);
     init0(rootEl);
-    return new ComponentRef<import2.HeroesComponent>(0, this, rootEl, _HeroesComponent_0_4);
-  }
-
-  @override
-  dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
-    if ((identical(token, import2.HeroesComponent) && (0 == nodeIndex))) {
-      return _HeroesComponent_0_4;
-    }
-    return notFoundResult;
+    return new ComponentRef<import2.HeroesComponent>(0, this, rootEl, _HeroesComponent_0_5);
   }
 
   @override
   void detectChangesInternal() {
     bool firstCheck = (this.cdState == 0);
     if (firstCheck) {
-      _HeroesComponent_0_4.ngOnInit();
+      _HeroesComponent_0_5.ngOnInit();
     }
     _compView_0.detectChanges();
   }

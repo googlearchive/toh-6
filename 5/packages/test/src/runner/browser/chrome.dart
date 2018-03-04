@@ -44,7 +44,7 @@ class Chrome extends Browser {
           "--disable-translate",
         ];
 
-        if (!debug) {
+        if (!debug && settings.headless) {
           args.addAll([
             "--headless",
             "--disable-gpu",

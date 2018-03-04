@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -45,16 +43,16 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
   import3.Text _text_1;
   import3.Element _el_2;
   import3.AnchorElement _el_3;
-  import4.RouterLinkNgCd _RouterLink_3_4;
-  import5.RouterLinkActive _RouterLinkActive_3_5;
+  import4.RouterLinkNgCd _RouterLink_3_5;
+  import5.RouterLinkActive _RouterLinkActive_3_6;
   bool _query_RouterLink_3_0_isDirty = true;
   import3.AnchorElement _el_5;
-  import4.RouterLinkNgCd _RouterLink_5_4;
-  import5.RouterLinkActive _RouterLinkActive_5_5;
+  import4.RouterLinkNgCd _RouterLink_5_5;
+  import5.RouterLinkActive _RouterLinkActive_5_6;
   bool _query_RouterLink_5_0_isDirty = true;
   import3.Element _el_7;
   ViewContainer _appEl_7;
-  import7.RouterOutlet _RouterOutlet_7_6;
+  import7.RouterOutlet _RouterOutlet_7_8;
   var _expr_5;
   static RenderComponentType _renderType;
   ViewAppComponent0(AppView<dynamic> parentView, num parentIndex) : super(import9.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
@@ -76,26 +74,26 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
     createAttr(_el_3, 'routerLink', '/dashboard');
     createAttr(_el_3, 'routerLinkActive', 'active');
     addShimC(_el_3);
-    _RouterLink_3_4 = new import4.RouterLinkNgCd(new import13.RouterLink(parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import15.Location, viewData.parentIndex), null, _el_3));
-    _RouterLinkActive_3_5 = new import5.RouterLinkActive(_el_3, parentView.injectorGet(import14.Router, viewData.parentIndex));
+    _RouterLink_3_5 = new import4.RouterLinkNgCd(new import13.RouterLink(parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import15.Location, viewData.parentIndex), null, _el_3));
+    _RouterLinkActive_3_6 = new import5.RouterLinkActive(_el_3, parentView.injectorGet(import14.Router, viewData.parentIndex));
     import3.Text _text_4 = new import3.Text('Dashboard');
     _el_3.append(_text_4);
-    _RouterLinkActive_3_5.links = [_RouterLink_3_4.instance];
+    _RouterLinkActive_3_6.links = [_RouterLink_3_5.instance];
     _el_5 = createAndAppend(doc, 'a', _el_2);
     createAttr(_el_5, 'routerLink', '/heroes');
     createAttr(_el_5, 'routerLinkActive', 'active');
     addShimC(_el_5);
-    _RouterLink_5_4 = new import4.RouterLinkNgCd(new import13.RouterLink(parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import15.Location, viewData.parentIndex), null, _el_5));
-    _RouterLinkActive_5_5 = new import5.RouterLinkActive(_el_5, parentView.injectorGet(import14.Router, viewData.parentIndex));
+    _RouterLink_5_5 = new import4.RouterLinkNgCd(new import13.RouterLink(parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import15.Location, viewData.parentIndex), null, _el_5));
+    _RouterLinkActive_5_6 = new import5.RouterLinkActive(_el_5, parentView.injectorGet(import14.Router, viewData.parentIndex));
     import3.Text _text_6 = new import3.Text('Heroes');
     _el_5.append(_text_6);
-    _RouterLinkActive_5_5.links = [_RouterLink_5_4.instance];
+    _RouterLinkActive_5_6.links = [_RouterLink_5_5.instance];
     _el_7 = createAndAppend(doc, 'router-outlet', parentRenderNode);
     addShimE(_el_7);
     _appEl_7 = new ViewContainer(7, null, this, _el_7);
-    _RouterOutlet_7_6 = new import7.RouterOutlet(parentView.injectorGet(import7.RouterOutlet, viewData.parentIndex, null), parentView.injectorGet(import16.RouterOutletToken, viewData.parentIndex, null), _appEl_7, parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import17.RouterHook, viewData.parentIndex, null));
-    _el_3.addEventListener('click', eventHandler1(_RouterLink_3_4.instance.onClick));
-    _el_5.addEventListener('click', eventHandler1(_RouterLink_5_4.instance.onClick));
+    _RouterOutlet_7_8 = new import7.RouterOutlet(parentView.injectorGet(import7.RouterOutlet, viewData.parentIndex, null), parentView.injectorGet(import16.RouterOutletToken, viewData.parentIndex, null), _appEl_7, parentView.injectorGet(import14.Router, viewData.parentIndex), parentView.injectorGet(import17.RouterHook, viewData.parentIndex, null));
+    _el_3.addEventListener('click', eventHandler1(_RouterLink_3_5.instance.onClick));
+    _el_5.addEventListener('click', eventHandler1(_RouterLink_5_5.instance.onClick));
     init(const [], null);
     return null;
   }
@@ -103,7 +101,7 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
     if ((identical(token, import7.RouterOutlet) && (7 == nodeIndex))) {
-      return _RouterOutlet_7_6;
+      return _RouterOutlet_7_8;
     }
     return notFoundResult;
   }
@@ -113,55 +111,47 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
     final import2.AppComponent _ctx = ctx;
     bool firstCheck = (this.cdState == 0);
     if (firstCheck) {
-      (_RouterLink_3_4.instance.routerLink = '/dashboard');
+      (_RouterLink_3_5.instance.routerLink = '/dashboard');
     }
     if (firstCheck) {
-      (_RouterLinkActive_3_5.routerLinkActive = 'active');
+      (_RouterLinkActive_3_6.routerLinkActive = 'active');
     }
     if (firstCheck) {
-      (_RouterLink_5_4.instance.routerLink = '/heroes');
+      (_RouterLink_5_5.instance.routerLink = '/heroes');
     }
     if (firstCheck) {
-      (_RouterLinkActive_5_5.routerLinkActive = 'active');
+      (_RouterLinkActive_5_6.routerLinkActive = 'active');
     }
     final currVal_5 = _ctx.routes.all;
     if (!identical(_expr_5, currVal_5)) {
-      _RouterOutlet_7_6.routes = currVal_5;
+      _RouterOutlet_7_8.routes = currVal_5;
       _expr_5 = currVal_5;
     }
     if (firstCheck) {
-      _RouterOutlet_7_6.ngOnInit();
+      _RouterOutlet_7_8.ngOnInit();
     }
     _appEl_7.detectChangesInNestedViews();
-    if (_query_RouterLink_3_0_isDirty) {
-      _RouterLinkActive_3_5.links = [_RouterLink_3_4.instance];
-      _query_RouterLink_3_0_isDirty = false;
-    }
-    if (_query_RouterLink_5_0_isDirty) {
-      _RouterLinkActive_5_5.links = [_RouterLink_5_4.instance];
-      _query_RouterLink_5_0_isDirty = false;
-    }
     if (firstCheck) {
       (_text_1.text = (_ctx.title ?? ''));
     }
-    _RouterLink_3_4.detectHostChanges(this, _el_3);
-    _RouterLink_5_4.detectHostChanges(this, _el_5);
+    _RouterLink_3_5.detectHostChanges(this, _el_3);
+    _RouterLink_5_5.detectHostChanges(this, _el_5);
     if (firstCheck) {
-      _RouterLinkActive_3_5.ngAfterViewInit();
+      _RouterLinkActive_3_6.ngAfterViewInit();
     }
     if (firstCheck) {
-      _RouterLinkActive_5_5.ngAfterViewInit();
+      _RouterLinkActive_5_6.ngAfterViewInit();
     }
   }
 
   @override
   void destroyInternal() {
     _appEl_7?.destroyNestedViews();
-    _RouterLink_3_4.instance.ngOnDestroy();
-    _RouterLinkActive_3_5.ngOnDestroy();
-    _RouterLink_5_4.instance.ngOnDestroy();
-    _RouterLinkActive_5_5.ngOnDestroy();
-    _RouterOutlet_7_6.ngOnDestroy();
+    _RouterLink_3_5.instance.ngOnDestroy();
+    _RouterLinkActive_3_6.ngOnDestroy();
+    _RouterLink_5_5.instance.ngOnDestroy();
+    _RouterLinkActive_5_6.ngOnDestroy();
+    _RouterOutlet_7_8.ngOnDestroy();
   }
 }
 
@@ -173,38 +163,35 @@ const List<dynamic> styles$AppComponentHost = const [];
 
 class _ViewAppComponentHost0 extends AppView<dynamic> {
   ViewAppComponent0 _compView_0;
-  import18.AppRoutes _AppRoutes_0_4;
-  import2.AppComponent _AppComponent_0_5;
-  import19.HeroService __HeroService_0_6;
+  import18.AppRoutes _AppRoutes_0_5;
+  import2.AppComponent _AppComponent_0_6;
+  import19.HeroService __HeroService_0_7;
   _ViewAppComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import9.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
-  import19.HeroService get _HeroService_0_6 {
-    if ((this.__HeroService_0_6 == null)) {
-      (__HeroService_0_6 = new import19.HeroService(this.injectorGet(import20.Client, this.viewData.parentIndex)));
+  import19.HeroService get _HeroService_0_7 {
+    if ((this.__HeroService_0_7 == null)) {
+      (__HeroService_0_7 = new import19.HeroService(this.injectorGet(import20.Client, this.viewData.parentIndex)));
     }
-    return this.__HeroService_0_6;
+    return this.__HeroService_0_7;
   }
 
   @override
   ComponentRef build() {
     _compView_0 = new ViewAppComponent0(this, 0);
     rootEl = _compView_0.rootEl;
-    _AppRoutes_0_4 = new import18.AppRoutes();
-    _AppComponent_0_5 = new import2.AppComponent(_AppRoutes_0_4);
-    _compView_0.create(_AppComponent_0_5, projectableNodes);
+    _AppRoutes_0_5 = new import18.AppRoutes();
+    _AppComponent_0_6 = new import2.AppComponent(_AppRoutes_0_5);
+    _compView_0.create(_AppComponent_0_6, projectableNodes);
     init0(rootEl);
-    return new ComponentRef<import2.AppComponent>(0, this, rootEl, _AppComponent_0_5);
+    return new ComponentRef<import2.AppComponent>(0, this, rootEl, _AppComponent_0_6);
   }
 
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
     if ((identical(token, import18.AppRoutes) && (0 == nodeIndex))) {
-      return _AppRoutes_0_4;
-    }
-    if ((identical(token, import2.AppComponent) && (0 == nodeIndex))) {
-      return _AppComponent_0_5;
+      return _AppRoutes_0_5;
     }
     if ((identical(token, import19.HeroService) && (0 == nodeIndex))) {
-      return _HeroService_0_6;
+      return _HeroService_0_7;
     }
     return notFoundResult;
   }

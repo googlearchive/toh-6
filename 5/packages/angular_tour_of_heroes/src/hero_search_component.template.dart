@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -43,7 +41,7 @@ class ViewHeroSearchComponent0 extends AppView<import2.HeroSearchComponent> {
   import3.InputElement _el_3;
   import3.DivElement _el_4;
   ViewContainer _appEl_5;
-  import5.NgFor _NgFor_5_7;
+  import5.NgFor _NgFor_5_9;
   var _expr_0;
   import6.AsyncPipe _pipe_async_0;
   static RenderComponentType _renderType;
@@ -71,8 +69,8 @@ class ViewHeroSearchComponent0 extends AppView<import2.HeroSearchComponent> {
     var _anchor_5 = ngAnchor.clone(false);
     _el_4.append(_anchor_5);
     _appEl_5 = new ViewContainer(5, 4, this, _anchor_5);
-    TemplateRef _TemplateRef_5_6 = new TemplateRef(_appEl_5, viewFactory_HeroSearchComponent1);
-    _NgFor_5_7 = new import5.NgFor(_appEl_5, _TemplateRef_5_6);
+    TemplateRef _TemplateRef_5_8 = new TemplateRef(_appEl_5, viewFactory_HeroSearchComponent1);
+    _NgFor_5_9 = new import5.NgFor(_appEl_5, _TemplateRef_5_8);
     _el_3.addEventListener('change', eventHandler1(_handle_change_3_0));
     _el_3.addEventListener('keyup', eventHandler1(_handle_keyup_3_1));
     _pipe_async_0 = new import6.AsyncPipe(ref);
@@ -85,10 +83,10 @@ class ViewHeroSearchComponent0 extends AppView<import2.HeroSearchComponent> {
     final import2.HeroSearchComponent _ctx = ctx;
     final currVal_0 = _pipe_async_0.transform(_ctx.heroes);
     if (!identical(_expr_0, currVal_0)) {
-      _NgFor_5_7.ngForOf = currVal_0;
+      _NgFor_5_9.ngForOf = currVal_0;
       _expr_0 = currVal_0;
     }
-    _NgFor_5_7.ngDoCheck();
+    _NgFor_5_9.ngDoCheck();
     _appEl_5.detectChangesInNestedViews();
   }
 
@@ -157,27 +155,24 @@ const List<dynamic> styles$HeroSearchComponentHost = const [];
 
 class _ViewHeroSearchComponentHost0 extends AppView<dynamic> {
   ViewHeroSearchComponent0 _compView_0;
-  import13.HeroSearchService _HeroSearchService_0_4;
-  import2.HeroSearchComponent _HeroSearchComponent_0_5;
+  import13.HeroSearchService _HeroSearchService_0_5;
+  import2.HeroSearchComponent _HeroSearchComponent_0_6;
   _ViewHeroSearchComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import8.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewHeroSearchComponent0(this, 0);
     rootEl = _compView_0.rootEl;
-    _HeroSearchService_0_4 = new import13.HeroSearchService(this.injectorGet(import14.Client, viewData.parentIndex));
-    _HeroSearchComponent_0_5 = new import2.HeroSearchComponent(_HeroSearchService_0_4, this.injectorGet(import15.Router, viewData.parentIndex));
-    _compView_0.create(_HeroSearchComponent_0_5, projectableNodes);
+    _HeroSearchService_0_5 = new import13.HeroSearchService(this.injectorGet(import14.Client, viewData.parentIndex));
+    _HeroSearchComponent_0_6 = new import2.HeroSearchComponent(_HeroSearchService_0_5, this.injectorGet(import15.Router, viewData.parentIndex));
+    _compView_0.create(_HeroSearchComponent_0_6, projectableNodes);
     init0(rootEl);
-    return new ComponentRef<import2.HeroSearchComponent>(0, this, rootEl, _HeroSearchComponent_0_5);
+    return new ComponentRef<import2.HeroSearchComponent>(0, this, rootEl, _HeroSearchComponent_0_6);
   }
 
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
     if ((identical(token, import13.HeroSearchService) && (0 == nodeIndex))) {
-      return _HeroSearchService_0_4;
-    }
-    if ((identical(token, import2.HeroSearchComponent) && (0 == nodeIndex))) {
-      return _HeroSearchComponent_0_5;
+      return _HeroSearchService_0_5;
     }
     return notFoundResult;
   }
@@ -186,7 +181,7 @@ class _ViewHeroSearchComponentHost0 extends AppView<dynamic> {
   void detectChangesInternal() {
     bool firstCheck = (this.cdState == 0);
     if (firstCheck) {
-      _HeroSearchComponent_0_5.ngOnInit();
+      _HeroSearchComponent_0_6.ngOnInit();
     }
     _compView_0.detectChanges();
   }

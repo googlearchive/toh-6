@@ -2,15 +2,17 @@ import 'dart:async';
 import 'dart:html';
 import 'dart:js_util' as js_util;
 
-import 'package:meta/meta.dart';
 import 'package:angular/src/core/app_view_consts.dart';
 import 'package:angular/src/core/change_detection/change_detection.dart'
     show ChangeDetectorRef, ChangeDetectionStrategy, ChangeDetectorState;
+import 'package:angular/src/di/errors.dart' as di_errors;
 import 'package:angular/src/di/injector/element.dart';
 import 'package:angular/src/di/injector/injector.dart'
     show throwIfNotFound, Injector;
 import 'package:angular/src/core/render/api.dart';
 import 'package:angular/src/platform/dom/shared_styles_host.dart';
+import 'package:angular/src/runtime.dart';
+import 'package:meta/meta.dart';
 
 import 'app_view_utils.dart';
 import 'component_factory.dart';
@@ -21,6 +23,13 @@ import 'view_ref.dart' show ViewRefImpl;
 import 'view_type.dart' show ViewType;
 
 export 'package:angular/src/core/change_detection/component_state.dart';
+
+// TODO: Remove the following lines (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: invalid_assignment
+// ignore_for_file: list_element_type_not_assignable
+// ignore_for_file: non_bool_operand
+// ignore_for_file: return_of_invalid_type
 
 /// **INTERNAL ONLY**: Will be made private once the reflective compiler is out.
 ///
@@ -143,7 +152,7 @@ class AppViewData<T> {
   }
 }
 
-/// Base class for a generated templates for a given [Component] type [T].
+/// Base class for a generated template for a given [Component] type [T].
 abstract class AppView<T> {
   AppViewData<T> viewData;
 
@@ -296,6 +305,7 @@ abstract class AppView<T> {
   }
 
   dynamic injectorGet(token, int nodeIndex, [notFoundValue = throwIfNotFound]) {
+    di_errors.debugInjectorEnter(token);
     var result = _UndefinedInjectorResult;
     AppView view = this;
     while (identical(result, _UndefinedInjectorResult)) {
@@ -312,6 +322,7 @@ abstract class AppView<T> {
       nodeIndex = view.viewData.parentIndex;
       view = view.parentView;
     }
+    di_errors.debugInjectorLeave(token);
     return result;
   }
 
@@ -384,12 +395,9 @@ abstract class AppView<T> {
     }
 
     // Sanity check in dev-mode that a destroyed view is not checked again.
-    assert((() {
-      if (viewData.destroyed) {
-        throw new ViewDestroyedException('detectChanges');
-      }
-      return true;
-    })());
+    if (isDevMode && viewData.destroyed) {
+      throw new ViewDestroyedException('detectChanges');
+    }
 
     if (lastGuardedView != null) {
       // Run change detection in "slow-mode" to catch thrown exceptions.
@@ -761,10 +769,4 @@ SpanElement createSpanAndAppend(Document doc, Element parent) {
   return null; // ignore: dead_code
   return null; // ignore: dead_code
   return null; // ignore: dead_code
-}
-
-/// Helper function called by AppView.build to reduce code size.
-Element createAndAppendToShadowRoot(
-    Document doc, String tagName, ShadowRoot parent) {
-  return parent.append(doc.createElement(tagName));
 }

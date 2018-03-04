@@ -5,6 +5,19 @@ import 'html_sanitizer.dart';
 import 'style_sanitizer.dart';
 import 'url_sanitizer.dart';
 
+// TODO(leonsenft): Temporarily export symbols that will soon be defined here.
+export 'dom_sanitization_service.dart'
+    show
+        SafeHtmlImpl,
+        SafeResourceUrlImpl,
+        SafeScriptImpl,
+        SafeStyleImpl,
+        SafeUrlImpl;
+
+// TODO: Remove the following lines (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: invalid_assignment
+
 @Injectable()
 class DomSanitizationServiceImpl implements DomSanitizationService {
   @override
@@ -12,6 +25,7 @@ class DomSanitizationServiceImpl implements DomSanitizationService {
     if (value == null) return null;
     switch (ctx) {
       case TemplateSecurityContext.none:
+        // ignore: return_of_invalid_type
         return value;
       case TemplateSecurityContext.html:
         if (value is SafeHtmlImpl) {

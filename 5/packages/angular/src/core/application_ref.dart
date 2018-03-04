@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:html';
 
+import 'package:angular/src/runtime.dart';
 import 'package:meta/meta.dart';
 
 import '../facade/exceptions.dart' show BaseException, ExceptionHandler;
@@ -20,6 +21,13 @@ import 'render/api.dart' show sharedStylesHost;
 import 'testability/testability.dart' show TestabilityRegistry, Testability;
 import 'zone/ng_zone.dart' show NgZone, NgZoneError;
 
+// TODO: Remove the following lines (for --no-implicit-casts).
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: invalid_assignment
+// ignore_for_file: list_element_type_not_assignable
+// ignore_for_file: non_bool_operand
+// ignore_for_file: return_of_invalid_type
+
 /// Create an Angular zone.
 NgZone createNgZone() => new NgZone(enableLongStackTrace: assertionsEnabled());
 
@@ -29,7 +37,7 @@ bool _inPlatformCreate = false;
 /// Creates a platform.
 /// Platforms have to be eagerly created via this function.
 PlatformRefImpl createPlatform(Injector injector) {
-  assert((() {
+  if (isDevMode) {
     if (_inPlatformCreate) {
       throw new BaseException('Already creating a platform...');
     }
@@ -37,8 +45,7 @@ PlatformRefImpl createPlatform(Injector injector) {
       throw new BaseException('There can be only one platform. Destroy the '
           'previous one to create a new one.');
     }
-    return true;
-  })());
+  }
   _inPlatformCreate = true;
   sharedStylesHost ??= new DomSharedStylesHost(document);
   try {
@@ -134,13 +141,10 @@ class PlatformRefImpl extends PlatformRef {
 
   /// Given an injector, gets platform initializers to initialize at bootstrap.
   void init(Injector injector) {
-    assert((() {
-      if (!_inPlatformCreate) {
-        throw new BaseException(
-            'Platforms have to be initialized via `createPlatform`!');
-      }
-      return true;
-    })());
+    if (isDevMode && !_inPlatformCreate) {
+      throw new BaseException(
+          'Platforms have to be initialized via `createPlatform`!');
+    }
     _injector = injector;
 
     List initializers = injector.get(PLATFORM_INITIALIZER, null);
@@ -301,7 +305,7 @@ class ApplicationRefImpl extends ApplicationRef {
   bool _runningTick = false;
   bool _enforceNoNewChanges = false;
   ExceptionHandler _exceptionHandler;
-  Future<dynamic> _asyncInitDonePromise;
+  Future<bool> _asyncInitDonePromise;
   bool _asyncInitDone;
 
   ApplicationRefImpl(this._platform, this._zone, this._injector) {
@@ -310,10 +314,11 @@ class ApplicationRefImpl extends ApplicationRef {
     zone.run(() {
       _exceptionHandler = _injector.get(ExceptionHandler);
     });
-    _asyncInitDonePromise = this.run(() {
+    // <bool> due to https://github.com/dart-lang/sdk/issues/32284.
+    _asyncInitDonePromise = this.run<bool>(() {
       List<Function> initializers = _injector.get(APP_INITIALIZER, null);
       var asyncInitResults = <Future>[];
-      var asyncInitDonePromise;
+      Future<bool> asyncInitDonePromise;
       if (initializers != null) {
         int initializerCount = initializers.length;
         for (var i = 0; i < initializerCount; i++) {
@@ -324,8 +329,9 @@ class ApplicationRefImpl extends ApplicationRef {
         }
       }
       if (asyncInitResults.length > 0) {
-        asyncInitDonePromise =
-            Future.wait(asyncInitResults).then((_) => _asyncInitDone = true);
+        asyncInitDonePromise = Future.wait(asyncInitResults).then((_) {
+          _asyncInitDone = true;
+        });
         _asyncInitDone = false;
       } else {
         _asyncInitDone = true;
@@ -370,7 +376,9 @@ class ApplicationRefImpl extends ApplicationRef {
   // Future (if any) has the correct reified type.
   run<R>(FutureOr<R> callback()) {
     // TODO(matanl): Remove support for futures inside of appRef.run.
-    var zone = injector.get(NgZone);
+    final NgZone zone = injector.get(NgZone);
+    // Using FutureOr<R> results in strange behavior/bad type promotion:
+    // https://github.com/dart-lang/sdk/issues/32285
     var result;
     // Note: Don't use zone.runGuarded as we want to know about the thrown
     // exception!
@@ -381,6 +389,8 @@ class ApplicationRefImpl extends ApplicationRef {
     zone.run(() {
       try {
         result = callback();
+        // Cannot properly type (or type promote) due to analyzer bug:
+        // https://github.com/dart-lang/sdk/issues/32285
         if (result is Future) {
           result.then((ref) {
             completer.complete(ref);
@@ -401,14 +411,11 @@ class ApplicationRefImpl extends ApplicationRef {
     ComponentFactory<T> componentFactory, [
     Injector parent,
   ]) {
-    assert((() {
-      if (!_asyncInitDone) {
-        throw new BaseException(
-            'Cannot bootstrap as there are still asynchronous initializers '
-            'running. Wait for them using waitForAsyncInitializers().');
-      }
-      return true;
-    })());
+    if (isDevMode && !_asyncInitDone) {
+      throw new BaseException(
+          'Cannot bootstrap as there are still asynchronous initializers '
+          'running. Wait for them using waitForAsyncInitializers().');
+    }
 
     return run(() {
       _rootComponentFactories.add(componentFactory);
@@ -476,12 +483,9 @@ class ApplicationRefImpl extends ApplicationRef {
     // Protect against tick being called recursively in development mode.
     //
     // This is mostly to assert valid changes to the framework, not user code.
-    assert((() {
-      if (_runningTick) {
-        throw new BaseException('ApplicationRef.tick is called recursively');
-      }
-      return true;
-    })());
+    if (isDevMode && _runningTick) {
+      throw new BaseException('ApplicationRef.tick is called recursively');
+    }
 
     // Run the top-level 'tick' (i.e. detectChanges on root components).
     try {

@@ -7,11 +7,11 @@ import 'directives/validators.dart' show ValidatorFn;
 AbstractControl _find(AbstractControl control,
     dynamic /* List< dynamic /* String | num */ > | String */ path) {
   if (path == null) return null;
-  if (!(path is List)) {
-    path = ((path as String)).split('/');
+  if (path is String) {
+    path = (path as String).split('/');
   }
   if (path is List && path.isEmpty) return null;
-  return ((path as List<dynamic /* String | num */ >)).fold(control, (v, name) {
+  return (path as List<dynamic /* String | num */ >).fold(control, (v, name) {
     if (v is ControlGroup) {
       return v.controls[name];
     } else if (v is ControlArray) {
@@ -23,7 +23,7 @@ AbstractControl _find(AbstractControl control,
   });
 }
 
-abstract class AbstractControl {
+abstract class AbstractControl<T> {
   /// Indicates that a Control is valid, i.e. that no errors exist in the input
   /// value.
   static const VALID = 'VALID';
@@ -37,16 +37,20 @@ abstract class AbstractControl {
   static const PENDING = 'PENDING';
 
   ValidatorFn validator;
-  dynamic _value;
-  StreamController<dynamic> _valueChanges;
-  StreamController<dynamic> _statusChanges;
+  T _value;
+  final _valueChanges = new StreamController<T>.broadcast();
+  final _statusChanges = new StreamController<String>.broadcast();
   String _status;
   Map<String, dynamic> _errors;
   bool _pristine = true;
   bool _touched = false;
-  dynamic /* ControlGroup | ControlArray */ _parent;
-  AbstractControl(this.validator);
-  dynamic get value => _value;
+  AbstractControl _parent;
+
+  AbstractControl(this.validator, {value}) : _value = value {
+    updateValueAndValidity(onlySelf: true, emitEvent: false);
+  }
+
+  T get value => _value;
 
   /// The validation status of the control.
   ///
@@ -66,14 +70,18 @@ abstract class AbstractControl {
 
   bool get untouched => !_touched;
 
-  Stream<dynamic> get valueChanges => _valueChanges.stream;
+  Stream<T> get valueChanges => _valueChanges.stream;
 
-  Stream<dynamic> get statusChanges => _statusChanges.stream;
+  Stream<String> get statusChanges => _statusChanges.stream;
 
   bool get pending => _status == PENDING;
 
   void markAsTouched() {
     _touched = true;
+  }
+
+  void markAsUntouched() {
+    _touched = false;
   }
 
   void markAsDirty({bool onlySelf, bool emitEvent}) {
@@ -94,7 +102,7 @@ abstract class AbstractControl {
     }
   }
 
-  void setParent(dynamic /* ControlGroup | ControlArray */ parent) {
+  void setParent(AbstractControl parent) {
     _parent = parent;
   }
 
@@ -182,11 +190,6 @@ abstract class AbstractControl {
     _parent?._updateControlsErrors();
   }
 
-  void _initObservables() {
-    _valueChanges = new StreamController.broadcast();
-    _statusChanges = new StreamController.broadcast();
-  }
-
   String _calculateStatus() {
     if (_errors != null) return INVALID;
     if (_anyControlsHaveStatus(PENDING)) return PENDING;
@@ -200,6 +203,7 @@ abstract class AbstractControl {
   /// to calculate it's value based on their children.
   @protected
   void onUpdate();
+
   bool _anyControlsHaveStatus(String status);
 }
 
@@ -217,15 +221,12 @@ abstract class AbstractControl {
 /// With [NgFormControl] or [NgFormModel] an existing [Control] can be
 /// bound to a DOM element instead. This `Control` can be configured with a
 /// custom validation function.
-class Control extends AbstractControl {
+class Control<T> extends AbstractControl<T> {
   Function _onChange;
   String _rawValue;
-  Control([dynamic value, ValidatorFn validator]) : super(validator) {
-    //// super call moved to initializer */;
-    _value = value;
-    updateValueAndValidity(onlySelf: true, emitEvent: false);
-    _initObservables();
-  }
+
+  Control([dynamic value, ValidatorFn validator])
+      : super(validator, value: value);
 
   /// Set the value of the control to `value`.
   ///
@@ -237,7 +238,7 @@ class Control extends AbstractControl {
   /// If `emitModelToViewChange` is `true`, the view will be notified about the
   /// new value via an `onChange` event. This is the default behavior if
   /// `emitModelToViewChange` is not specified.
-  void updateValue(dynamic value,
+  void updateValue(T value,
       {bool onlySelf,
       bool emitEvent,
       bool emitModelToViewChange,
@@ -283,16 +284,15 @@ class Control extends AbstractControl {
 /// `ControlGroup` is one of the three fundamental building blocks used to
 /// define forms in Angular, along with [Control] and [ControlArray].
 /// [ControlArray] can also contain other controls, but is of variable length.
-class ControlGroup extends AbstractControl {
+class ControlGroup extends AbstractControl<Map<String, dynamic>> {
   final Map<String, AbstractControl> controls;
   final Map<String, bool> _optionals;
+
   ControlGroup(this.controls,
       [Map<String, bool> optionals, ValidatorFn validator])
       : _optionals = optionals ?? {},
         super(validator) {
-    _initObservables();
-    _setParentForControls();
-    updateValueAndValidity(onlySelf: true, emitEvent: false);
+    _setParentForControls(this, controls.values);
   }
 
   /// Add a control to this group.
@@ -322,12 +322,6 @@ class ControlGroup extends AbstractControl {
   bool contains(String controlName) =>
       controls.containsKey(controlName) && _included(controlName);
 
-  void _setParentForControls() {
-    for (var control in controls.values) {
-      control.setParent(this);
-    }
-  }
-
   @override
   void onUpdate() {
     _value = _reduceValue();
@@ -341,21 +335,10 @@ class ControlGroup extends AbstractControl {
   }
 
   Map<String, dynamic> _reduceValue() {
-    return _reduceChildren(<String, dynamic>{},
-        (Map<String, dynamic> acc, AbstractControl control, String name) {
-      acc[name] = control.value;
-      return acc;
-    });
-  }
-
-  Map<String, dynamic> _reduceChildren(
-      Map<String, dynamic> initValue,
-      Map<String, dynamic> fn(
-          Map<String, dynamic> acc, AbstractControl control, String name)) {
-    var res = initValue;
+    final res = <String, dynamic>{};
     controls.forEach((name, control) {
       if (_included(name)) {
-        res = fn(res, control, name);
+        res[name] = control.value;
       }
     });
     return res;
@@ -384,12 +367,11 @@ class ControlGroup extends AbstractControl {
 /// `AbstractControl`s used to instantiate the `ControlArray` directly, as that
 /// will result in strange and unexpected behavior such as broken change
 /// detection.
-class ControlArray extends AbstractControl {
+class ControlArray extends AbstractControl<List> {
   List<AbstractControl> controls;
+
   ControlArray(this.controls, [ValidatorFn validator]) : super(validator) {
-    _initObservables();
-    _setParentForControls();
-    updateValueAndValidity(onlySelf: true, emitEvent: false);
+    _setParentForControls(this, controls);
   }
 
   /// Get the [AbstractControl] at the given `index` in the list.
@@ -426,10 +408,11 @@ class ControlArray extends AbstractControl {
   @override
   bool _anyControlsHaveStatus(String status) =>
       controls.any((c) => c.status == status);
+}
 
-  void _setParentForControls() {
-    controls.forEach((control) {
-      control.setParent(this);
-    });
+void _setParentForControls(
+    AbstractControl parent, Iterable<AbstractControl> children) {
+  for (final control in children) {
+    control.setParent(parent);
   }
 }

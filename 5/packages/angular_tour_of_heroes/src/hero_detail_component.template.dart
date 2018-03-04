@@ -1,7 +1,5 @@
-// GENERATED CODE - DO NOT MODIFY BY HAND
-
 // **************************************************************************
-// Generator: TemplateGenerator
+// Generator: Instance of 'Compiler'
 // **************************************************************************
 
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
@@ -32,18 +30,19 @@ import 'package:angular/src/core/linker/app_view_utils.dart' as import9;
 import 'package:angular/angular.dart';
 import 'package:angular/src/core/linker/template_ref.dart';
 import 'package:angular_forms/src/directives/default_value_accessor.dart' as import12;
-import 'package:angular_forms/src/directives/ng_model.dart' as import13;
-import 'package:angular/src/core/di/opaque_token.dart' as import14;
-import 'package:angular_forms/src/directives/control_value_accessor.dart' as import15;
-import 'package:angular_forms/src/directives/ng_control.dart' as import16;
-import 'hero_service.dart' as import17;
-import 'package:angular_router/src/location/location.dart' as import18;
+import 'package:angular_forms/src/directives/control_value_accessor.dart' as import13;
+import 'package:angular_forms/src/directives/ng_model.dart' as import14;
+import 'package:angular/src/core/di/opaque_token.dart' as import15;
+import 'package:angular_forms/src/directives/control_value_accessor.dart' as import16;
+import 'package:angular_forms/src/directives/ng_control.dart' as import17;
+import 'hero_service.dart' as import18;
+import 'package:angular_router/src/location/location.dart' as import19;
 
 const List<dynamic> styles$HeroDetailComponent = const [import0.styles];
 
 class ViewHeroDetailComponent0 extends AppView<import2.HeroDetailComponent> {
   ViewContainer _appEl_0;
-  NgIf _NgIf_0_7;
+  NgIf _NgIf_0_9;
   static RenderComponentType _renderType;
   ViewHeroDetailComponent0(AppView<dynamic> parentView, num parentIndex) : super(import6.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     rootEl = import8.document.createElement('hero-detail');
@@ -56,8 +55,8 @@ class ViewHeroDetailComponent0 extends AppView<import2.HeroDetailComponent> {
     var _anchor_0 = ngAnchor.clone(false);
     parentRenderNode.append(_anchor_0);
     _appEl_0 = new ViewContainer(0, null, this, _anchor_0);
-    TemplateRef _TemplateRef_0_6 = new TemplateRef(_appEl_0, viewFactory_HeroDetailComponent1);
-    _NgIf_0_7 = new NgIf(_appEl_0, _TemplateRef_0_6);
+    TemplateRef _TemplateRef_0_8 = new TemplateRef(_appEl_0, viewFactory_HeroDetailComponent1);
+    _NgIf_0_9 = new NgIf(_appEl_0, _TemplateRef_0_8);
     init(const [], null);
     return null;
   }
@@ -65,7 +64,7 @@ class ViewHeroDetailComponent0 extends AppView<import2.HeroDetailComponent> {
   @override
   void detectChangesInternal() {
     final import2.HeroDetailComponent _ctx = ctx;
-    _NgIf_0_7.ngIf = (_ctx.hero != null);
+    _NgIf_0_9.ngIf = (_ctx.hero != null);
     _appEl_0.detectChangesInNestedViews();
   }
 
@@ -89,9 +88,9 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
   import8.DivElement _el_8;
   import8.Element _el_9;
   import8.InputElement _el_11;
-  import12.DefaultValueAccessor _DefaultValueAccessor_11_4;
-  List<dynamic> _NgValueAccessor_11_5;
-  import13.NgModel _NgModel_11_6;
+  import12.DefaultValueAccessor _DefaultValueAccessor_11_5;
+  List<import13.ControlValueAccessor<dynamic>> _NgValueAccessor_11_6;
+  import14.NgModel _NgModel_11_7;
   import8.ButtonElement _el_12;
   import8.ButtonElement _el_14;
   var _expr_0;
@@ -127,9 +126,9 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
     _el_11 = createAndAppend(doc, 'input', _el_8);
     createAttr(_el_11, 'placeholder', 'name');
     addShimC(_el_11);
-    _DefaultValueAccessor_11_4 = new import12.DefaultValueAccessor(_el_11);
-    _NgValueAccessor_11_5 = [_DefaultValueAccessor_11_4];
-    _NgModel_11_6 = new import13.NgModel(null, _NgValueAccessor_11_5);
+    _DefaultValueAccessor_11_5 = new import12.DefaultValueAccessor(_el_11);
+    _NgValueAccessor_11_6 = [_DefaultValueAccessor_11_5];
+    _NgModel_11_7 = new import14.NgModel(null, _NgValueAccessor_11_6);
     _el_12 = createAndAppend(doc, 'button', _el_0);
     addShimC(_el_12);
     import8.Text _text_13 = new import8.Text('Back');
@@ -139,8 +138,8 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
     import8.Text _text_15 = new import8.Text('Save');
     _el_14.append(_text_15);
     _el_11.addEventListener('input', eventHandler1(_handle_input_11_1));
-    _el_11.addEventListener('blur', eventHandler0(_DefaultValueAccessor_11_4.touchHandler));
-    final subscription_0 = _NgModel_11_6.update.listen(eventHandler1(_handle_ngModelChange_11_0));
+    _el_11.addEventListener('blur', eventHandler0(_DefaultValueAccessor_11_5.touchHandler));
+    final subscription_0 = _NgModel_11_7.update.listen(eventHandler1(_handle_ngModelChange_11_0));
     _el_12.addEventListener('click', eventHandler0(ctx.goBack));
     _el_14.addEventListener('click', eventHandler0(ctx.save));
     init([_el_0], [subscription_0]);
@@ -150,13 +149,13 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
     if ((identical(token, import12.DefaultValueAccessor) && (11 == nodeIndex))) {
-      return _DefaultValueAccessor_11_4;
+      return _DefaultValueAccessor_11_5;
     }
-    if ((identical(token, const import14.OpaqueToken<import15.ControlValueAccessor<dynamic>>('NgValueAccessor')) && (11 == nodeIndex))) {
-      return _NgValueAccessor_11_5;
+    if ((identical(token, const import15.MultiToken<import16.ControlValueAccessor>('NgValueAccessor')) && (11 == nodeIndex))) {
+      return _NgValueAccessor_11_6;
     }
-    if (((identical(token, import13.NgModel) || identical(token, import16.NgControl)) && (11 == nodeIndex))) {
-      return _NgModel_11_6;
+    if (((identical(token, import14.NgModel) || identical(token, import17.NgControl)) && (11 == nodeIndex))) {
+      return _NgModel_11_7;
     }
     return notFoundResult;
   }
@@ -167,10 +166,10 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
     bool changed = false;
     bool firstCheck = (this.cdState == 0);
     changed = false;
-    _NgModel_11_6.model = _ctx.hero.name;
-    _NgModel_11_6.ngAfterChanges();
+    _NgModel_11_7.model = _ctx.hero.name;
+    _NgModel_11_7.ngAfterChanges();
     if (firstCheck) {
-      _NgModel_11_6.ngOnInit();
+      _NgModel_11_7.ngOnInit();
     }
     final currVal_0 = import9.interpolate0(_ctx.hero.name);
     if (!identical(_expr_0, currVal_0)) {
@@ -189,7 +188,7 @@ class _ViewHeroDetailComponent1 extends AppView<import2.HeroDetailComponent> {
   }
 
   void _handle_input_11_1($event) {
-    _DefaultValueAccessor_11_4.onChange($event.target.value);
+    _DefaultValueAccessor_11_5.onChange($event.target.value);
   }
 }
 
@@ -201,24 +200,16 @@ const List<dynamic> styles$HeroDetailComponentHost = const [];
 
 class _ViewHeroDetailComponentHost0 extends AppView<dynamic> {
   ViewHeroDetailComponent0 _compView_0;
-  import2.HeroDetailComponent _HeroDetailComponent_0_4;
+  import2.HeroDetailComponent _HeroDetailComponent_0_5;
   _ViewHeroDetailComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import6.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewHeroDetailComponent0(this, 0);
     rootEl = _compView_0.rootEl;
-    _HeroDetailComponent_0_4 = new import2.HeroDetailComponent(this.injectorGet(import17.HeroService, viewData.parentIndex), this.injectorGet(import18.Location, viewData.parentIndex));
-    _compView_0.create(_HeroDetailComponent_0_4, projectableNodes);
+    _HeroDetailComponent_0_5 = new import2.HeroDetailComponent(this.injectorGet(import18.HeroService, viewData.parentIndex), this.injectorGet(import19.Location, viewData.parentIndex));
+    _compView_0.create(_HeroDetailComponent_0_5, projectableNodes);
     init0(rootEl);
-    return new ComponentRef<import2.HeroDetailComponent>(0, this, rootEl, _HeroDetailComponent_0_4);
-  }
-
-  @override
-  dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
-    if ((identical(token, import2.HeroDetailComponent) && (0 == nodeIndex))) {
-      return _HeroDetailComponent_0_4;
-    }
-    return notFoundResult;
+    return new ComponentRef<import2.HeroDetailComponent>(0, this, rootEl, _HeroDetailComponent_0_5);
   }
 
   @override
