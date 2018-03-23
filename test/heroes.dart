@@ -4,7 +4,7 @@ import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
-import 'package:angular_tour_of_heroes/src/heroes_component.dart';
+import 'package:angular_tour_of_heroes/src/hero_list_component.dart';
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
@@ -15,9 +15,9 @@ import 'utils.dart';
 
 const numHeroes = 10;
 const targetHeroIndex = 4; // index in full heroes list
-const targetHero = const {'id': 15, 'name': 'Magneta'};
+const targetHero = {'id': 15, 'name': 'Magneta'};
 
-NgTestFixture<HeroesComponent> fixture;
+NgTestFixture<HeroListComponent> fixture;
 HeroesPO po;
 
 final mockRouter = new MockRouter();
@@ -25,10 +25,10 @@ final mockRouter = new MockRouter();
 class MockRouter extends Mock implements Router {}
 
 void main() {
-  final testBed = new NgTestBed<HeroesComponent>().addProviders([
-    provide(Client, useClass: InMemoryDataService),
-    HeroService,
-    provide(Router, useValue: mockRouter),
+  final testBed = new NgTestBed<HeroListComponent>().addProviders([
+    const ClassProvider(Client, useClass: InMemoryDataService),
+    const ClassProvider(HeroService),
+    new ValueProvider(Router, mockRouter),
   ]);
 
   setUp(() async {
@@ -79,7 +79,7 @@ void selectedHeroTests() {
     await po.gotoDetail();
     await fixture.update();
     final c = verify(mockRouter.navigate(typed(captureAny)));
-    expect(c.captured.single, '/detail/${targetHero['id']}');
+    expect(c.captured.single, '/heroes/${targetHero['id']}');
   });
 
   test('select another hero', () async {

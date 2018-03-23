@@ -4,7 +4,7 @@ import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
-import 'package:angular_tour_of_heroes/src/hero_detail_component.dart';
+import 'package:angular_tour_of_heroes/src/hero_component.dart';
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
@@ -12,17 +12,17 @@ import 'package:test/test.dart';
 
 import 'hero_detail_po.dart';
 
-NgTestFixture<HeroDetailComponent> fixture;
+NgTestFixture<HeroComponent> fixture;
 HeroDetailPO po;
 
 final mockLocation = new MockLocation();
 final mockRouterState = new MockRouterState();
 
 void main() {
-  final testBed = new NgTestBed<HeroDetailComponent>().addProviders([
-    provide(Client, useClass: InMemoryDataService),
-    HeroService,
-    provide(Location, useValue: mockLocation),
+  final testBed = new NgTestBed<HeroComponent>().addProviders([
+    const ClassProvider(Client, useClass: InMemoryDataService),
+    const ClassProvider(HeroService),
+    new ValueProvider(Location, mockLocation),
   ]);
 
   setUp(() async {
@@ -36,7 +36,7 @@ void main() {
     expect(fixture.rootElement.text.trim(), '');
   });
 
-  const targetHero = const {'id': 15, 'name': 'Magneta'};
+  const targetHero = {'id': 15, 'name': 'Magneta'};
 
   group('${targetHero['name']} initial hero:', () {
     const nameSuffix = 'X';

@@ -1,6 +1,5 @@
 @TestOn('browser')
 
-import 'dart:async';
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
@@ -23,11 +22,11 @@ class MockRouter extends Mock implements Router {}
 
 void main() {
   final testBed = new NgTestBed<DashboardComponent>().addProviders([
-    provide(APP_BASE_HREF, useValue: '/'),
-    provide(Client, useClass: InMemoryDataService),
-    HeroService,
+    const ValueProvider.forToken(appBaseHref, '/'),
+    const ClassProvider(Client, useClass: InMemoryDataService),
+    const ClassProvider(HeroService),
     routerProviders,
-    provide(Router, useValue: mockRouter),
+    new ValueProvider(Router, mockRouter),
   ]);
 
   setUp(() async {
@@ -50,7 +49,7 @@ void main() {
     clearInteractions(mockRouter);
     await po.selectHero(3);
     var c = verify(mockRouter.navigate(typed(captureAny), typed(captureAny)));
-    expect(c.captured[0], '/detail/15');
+    expect(c.captured[0], '/heroes/15');
     expect(c.captured[1], new IsNavParams());
     expect(c.captured.length, 2);
   });

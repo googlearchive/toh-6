@@ -15,7 +15,7 @@ class HeroService {
 
   HeroService(this._http);
 
-  Future<List<Hero>> getHeroes() async {
+  Future<List<Hero>> getAll() async {
     try {
       final response = await _http.get(_heroesUrl);
       final heroes = _extractData(response)
@@ -27,14 +27,14 @@ class HeroService {
     }
   }
 
-  dynamic _extractData(Response resp) => JSON.decode(resp.body)['data'];
+  dynamic _extractData(Response resp) => json.decode(resp.body)['data'];
 
   Exception _handleError(dynamic e) {
     print(e); // for demo purposes only
     return new Exception('Server error; cause: $e');
   }
 
-  Future<Hero> getHero(int id) async {
+  Future<Hero> get(int id) async {
     try {
       final response = await _http.get('$_heroesUrl/$id');
       return new Hero.fromJson(_extractData(response));
@@ -46,7 +46,7 @@ class HeroService {
   Future<Hero> create(String name) async {
     try {
       final response = await _http.post(_heroesUrl,
-          headers: _headers, body: JSON.encode({'name': name}));
+          headers: _headers, body: json.encode({'name': name}));
       return new Hero.fromJson(_extractData(response));
     } catch (e) {
       throw _handleError(e);
@@ -57,14 +57,14 @@ class HeroService {
     try {
       final url = '$_heroesUrl/${hero.id}';
       final response =
-          await _http.put(url, headers: _headers, body: JSON.encode(hero));
+          await _http.put(url, headers: _headers, body: json.encode(hero));
       return new Hero.fromJson(_extractData(response));
     } catch (e) {
       throw _handleError(e);
     }
   }
 
-  Future<Null> delete(int id) async {
+  Future<void> delete(int id) async {
     try {
       final url = '$_heroesUrl/$id';
       await _http.delete(url, headers: _headers);

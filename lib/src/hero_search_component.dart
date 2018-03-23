@@ -4,16 +4,17 @@ import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:stream_transform/stream_transform.dart';
 
+import 'route_paths.dart' as paths;
 import 'hero_search_service.dart';
 import 'hero.dart';
 
 @Component(
   selector: 'hero-search',
   templateUrl: 'hero_search_component.html',
-  styleUrls: const ['hero_search_component.css'],
-  directives: const [coreDirectives],
-  providers: const [HeroSearchService],
-  pipes: const [COMMON_PIPES],
+  styleUrls: ['hero_search_component.css'],
+  directives: [coreDirectives],
+  providers: [HeroSearchService],
+  pipes: [COMMON_PIPES],
 )
 class HeroSearchComponent implements OnInit {
   HeroSearchService _heroSearchService;
@@ -28,7 +29,7 @@ class HeroSearchComponent implements OnInit {
   // Push a search term into the stream.
   void search(String term) => _searchTerms.add(term);
 
-  Future<Null> ngOnInit() async {
+  Future<void> ngOnInit() async {
     heroes = _searchTerms.stream
         .transform(debounce(new Duration(milliseconds: 300)))
         .distinct()
@@ -40,5 +41,9 @@ class HeroSearchComponent implements OnInit {
     });
   }
 
-  Future gotoDetail(Hero hero) => _router.navigate('/detail/${hero.id}');
+  String _heroUrl(int id) =>
+      paths.hero.toUrl(parameters: {paths.idParam: id.toString()});
+
+  Future<NavigationResult> gotoDetail(Hero hero) =>
+      _router.navigate(_heroUrl(hero.id));
 }

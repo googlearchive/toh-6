@@ -44,13 +44,13 @@ class InMemoryDataService extends MockClient {
         }
         break;
       case 'POST':
-        var name = JSON.decode(request.body)['name'];
+        var name = json.decode(request.body)['name'];
         var newHero = new Hero(_nextId++, name);
         _heroesDb.add(newHero);
         data = newHero;
         break;
       case 'PUT':
-        var heroChanges = new Hero.fromJson(JSON.decode(request.body));
+        var heroChanges = new Hero.fromJson(json.decode(request.body));
         var targetHero = _heroesDb.firstWhere((h) => h.id == heroChanges.id);
         targetHero.name = heroChanges.name;
         data = targetHero;
@@ -63,7 +63,7 @@ class InMemoryDataService extends MockClient {
       default:
         throw 'Unimplemented HTTP method ${request.method}';
     }
-    return new Response(JSON.encode({'data': data}), 200,
+    return new Response(json.encode({'data': data}), 200,
         headers: {'content-type': 'application/json'});
   }
 

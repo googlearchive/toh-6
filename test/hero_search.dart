@@ -23,9 +23,9 @@ class MockRouter extends Mock implements Router {}
 
 void main() {
   final testBed = new NgTestBed<HeroSearchComponent>().addProviders([
-    provide(Client, useClass: InMemoryDataService),
-    HeroService,
-    provide(Router, useValue: mockRouter),
+    const ClassProvider(Client, useClass: InMemoryDataService),
+    const ClassProvider(HeroService),
+    new ValueProvider(Router, mockRouter),
   ]);
 
   setUp(() async {
@@ -73,7 +73,7 @@ void heroSearchTests() {
     clearInteractions(mockRouter);
     await po.selectHero(0);
     final c = verify(mockRouter.navigate(typed(captureAny)));
-    expect(c.captured.single, '/detail/15');
+    expect(c.captured.single, '/heroes/15');
   });
 }
 

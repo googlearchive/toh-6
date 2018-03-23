@@ -21,9 +21,8 @@ class MockPlatformLocation extends Mock implements PlatformLocation {}
 void main() {
   ng.initReflector();
   final providers = [
-    provide(APP_BASE_HREF, useValue: '/'),
-    // FIXME provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),
-    provide(PlatformLocation, useValue: mockPlatformLocation),
+    const ValueProvider.forToken(appBaseHref, '/'),
+    new ValueProvider(PlatformLocation, mockPlatformLocation),
   ];
 
   final testBed = new NgTestBed<AppComponent>().addProviders(providers);
