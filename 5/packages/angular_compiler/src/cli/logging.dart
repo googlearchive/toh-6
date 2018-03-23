@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:analyzer/dart/element/element.dart';
+// TODO(https://github.com/dart-lang/sdk/issues/32454):
+// ignore: implementation_imports
+import 'package:analyzer/src/dart/element/element.dart';
 import 'package:build/build.dart' as build;
 import 'package:meta/meta.dart';
+import 'package:source_gen/source_gen.dart';
 import 'package:source_span/source_span.dart';
 import 'package:stack_trace/stack_trace.dart';
 
@@ -31,6 +35,13 @@ Future<T> runBuildZoned<T>(
           null,
           showInternalTraces ? e.stackTrace : null,
         );
+      } else if (e is UnresolvedAnnotationException) {
+        final elementSpan = spanForElement(e.annotatedElement);
+        final annotation = e.annotationSource.text;
+        final buffer = new StringBuffer()
+          ..writeln(elementSpan.message('Could not resolve "$annotation"'))
+          ..writeln(messages.analysisFailureReasons);
+        build.log.severe(buffer, null, showInternalTraces ? s : null);
       } else {
         build.log.severe(
           'Unhandled exception in the AngularDart compiler!\n\n'
@@ -65,6 +76,32 @@ class BuildError extends Error {
 
   BuildError(this.message, [Trace trace])
       : stackTrace = trace ?? new Trace.current();
+
+  // TODO: Remove internal API once ElementAnnotation has source information.
+  // https://github.com/dart-lang/sdk/issues/32454
+  static SourceSpan _getSourceSpanFrom(ElementAnnotation annotation) {
+    final internals = annotation as ElementAnnotationImpl;
+    final astNode = internals.annotationAst;
+    final contents = annotation.source.contents.data;
+    final start = astNode.offset;
+    final end = start + astNode.length;
+    return new SourceSpan(
+      new SourceLocation(start, sourceUrl: annotation.source.uri),
+      new SourceLocation(end, sourceUrl: annotation.source.uri),
+      contents.substring(start, end),
+    );
+  }
+
+  /// Throws a [BuildError] caused by analyzing the provided [annotation].
+  @alwaysThrows
+  static throwForAnnotation(
+    ElementAnnotation annotation,
+    String message, [
+    Trace trace,
+  ]) {
+    final sourceSpan = _getSourceSpanFrom(annotation);
+    throw new BuildError(sourceSpan.message(message), trace);
+  }
 
   /// Throws a [BuildError] caused by analyzing the provided [element].
   @alwaysThrows
@@ -125,5 +162,5 @@ void logWarning(String message) => build.log.warning(message);
 /// May optionally wrap a caught stack [trace].
 @alwaysThrows
 void throwFailure(String message, [StackTrace trace]) {
-  throw new BuildError(message, new Trace.from(trace));
+  throw new BuildError(message, trace != null ? new Trace.from(trace) : null);
 }

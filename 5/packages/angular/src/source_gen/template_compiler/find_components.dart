@@ -4,11 +4,13 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/dart/element/visitor.dart';
 import 'package:analyzer/src/dart/element/element.dart';
+import 'package:angular_compiler/cli.dart';
 import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
 import 'package:angular/src/compiler/analyzed_class.dart';
 import 'package:angular/src/compiler/compile_metadata.dart';
 import 'package:angular/src/compiler/offline_compiler.dart';
+import 'package:angular/src/compiler/output/convert.dart';
 import 'package:angular/src/core/change_detection/constants.dart';
 import 'package:angular/src/core/metadata.dart';
 import 'package:angular/src/core/metadata/lifecycle_hooks.dart';
@@ -31,7 +33,6 @@ const String _visibilityProperty = 'visibility';
 const _statefulDirectiveFields = const [
   'exportAs',
   'host',
-  _visibilityProperty,
 ];
 
 AngularArtifacts findComponentsAndDirectives(LibraryReader library) {
@@ -230,6 +231,15 @@ class ComponentVisitor
         invalid = true;
       }
     }
+    final visibility = coerceEnum(
+      annotationValue,
+      _visibilityProperty,
+      Visibility.values,
+    );
+    if (visibility != Visibility.local) {
+      log.severe('Functional directives must be visibility: Visibility.local');
+      invalid = true;
+    }
     if (invalid) return null;
     final type = element.accept(new CompileTypeMetadataVisitor(log, _library));
     final selector = coerceString(annotationValue, 'selector');
@@ -307,8 +317,15 @@ class ComponentVisitor
               _inputTypes[element.displayName] =
                   new CompileTypeMetadata(name: typeName);
             } else {
+              // Convert any generic type parameters from the input's type to
+              // our internal output AST.
+              final typeArguments = resolvedType is ParameterizedType
+                  ? resolvedType.typeArguments.map(fromDartType).toList()
+                  : const [];
               _inputTypes[element.displayName] = new CompileTypeMetadata(
-                  moduleUrl: moduleUrl(element), name: typeName);
+                  moduleUrl: moduleUrl(element),
+                  name: typeName,
+                  genericTypes: typeArguments);
             }
           }
         } else {
@@ -335,7 +352,7 @@ class ComponentVisitor
       ], log)(annotation)) {
         if (isSetter && element.isPublic) {
           _queries.add(_getQuery(
-            annotation.computeConstantValue(),
+            annotation,
             // Avoid emitting the '=' part of the setter.
             element.displayName,
             _fieldOrPropertyType(element),
@@ -350,7 +367,7 @@ class ComponentVisitor
       ], log)(annotation)) {
         if (isSetter && element.isPublic) {
           _viewQueries.add(_getQuery(
-            annotation.computeConstantValue(),
+            annotation,
             // Avoid emitting the '=' part of the setter.
             element.displayName,
             _fieldOrPropertyType(element),
@@ -373,8 +390,17 @@ class ComponentVisitor
     return null;
   }
 
-  List<CompileTokenMetadata> _getSelectors(DartObject value) {
+  List<CompileTokenMetadata> _getSelectors(
+    ElementAnnotation annotation,
+    DartObject value,
+  ) {
     var selector = getField(value, 'selector');
+    if (isNull(selector)) {
+      BuildError.throwForAnnotation(
+        annotation,
+        'Missing selector argument for "@${value.type.name}"',
+      );
+    }
     var selectorString = selector?.toStringValue();
     if (selectorString != null) {
       return selectorString
@@ -393,27 +419,28 @@ class ComponentVisitor
     ];
   }
 
+  static final _coreIterable = new TypeChecker.fromUrl('dart:core#Iterable');
   static final _htmlElement = new TypeChecker.fromUrl('dart:html#Element');
 
   CompileQueryMetadata _getQuery(
-    annotationOrObject,
+    ElementAnnotation annotation,
     String propertyName,
     DartType propertyType,
   ) {
-    DartObject value;
-    if (annotationOrObject is ElementAnnotation) {
-      value = annotationOrObject.computeConstantValue();
-    } else {
-      value = annotationOrObject;
-    }
+    final value = annotation.computeConstantValue();
     final readType = getField(value, 'read')?.toTypeValue();
     return new CompileQueryMetadata(
-      selectors: _getSelectors(value),
+      selectors: _getSelectors(annotation, value),
       descendants: coerceBool(value, 'descendants', defaultTo: false),
       first: coerceBool(value, 'first', defaultTo: false),
       propertyName: propertyName,
       isElementType: propertyType?.element != null &&
-          _htmlElement.isAssignableFromType(propertyType),
+              _htmlElement.isAssignableFromType(propertyType) ||
+          // A bit imprecise, but this will cover 'Iterable' and 'List'.
+          _coreIterable.isAssignableFromType(propertyType) &&
+              propertyType is ParameterizedType &&
+              _htmlElement
+                  .isAssignableFromType(propertyType.typeArguments.first),
       isQueryListType: propertyType?.element != null &&
           $QueryList.isExactlyType(propertyType),
       read: readType != null
@@ -623,7 +650,9 @@ class ComponentVisitor
 
     // There is an implicit "export" for the directive class itself
     exports.add(new CompileIdentifierMetadata(
-        name: element.name, moduleUrl: moduleUrl(element.library)));
+        name: element.name,
+        moduleUrl: moduleUrl(element.library),
+        analyzedClass: new AnalyzedClass(element)));
 
     var arguments = annotation.annotationAst.arguments.arguments;
     NamedExpression exportsArg = arguments.firstWhere(
@@ -642,6 +671,7 @@ class ComponentVisitor
     for (Identifier id in staticNames) {
       String name;
       String prefix;
+      AnalyzedClass analyzedClass;
       if (id is PrefixedIdentifier) {
         // We only allow prefixed identifiers to have library prefixes.
         if (id.prefix.staticElement is! PrefixElement) {
@@ -654,10 +684,17 @@ class ComponentVisitor
       } else {
         name = id.name;
       }
+
+      if (id.staticElement is ClassElement) {
+        analyzedClass = new AnalyzedClass(id.staticElement);
+      }
+
+      // TODO(het): Also store the `DartType` since we know it statically.
       exports.add(new CompileIdentifierMetadata(
         name: name,
         prefix: prefix,
         moduleUrl: moduleUrl(id.staticElement.library),
+        analyzedClass: analyzedClass,
       ));
     }
     return exports;

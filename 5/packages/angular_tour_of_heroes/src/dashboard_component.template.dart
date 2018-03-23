@@ -53,14 +53,15 @@ class ViewDashboardComponent0 extends AppView<import2.DashboardComponent> {
   import8.HeroSearchComponent _HeroSearchComponent_4_6;
   var _expr_0;
   static RenderComponentType _renderType;
-  ViewDashboardComponent0(AppView<dynamic> parentView, num parentIndex) : super(import10.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  ViewDashboardComponent0(AppView<dynamic> parentView, int parentIndex) : super(import10.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     rootEl = import3.document.createElement('my-dashboard');
     _renderType ??= import12.appViewUtils.createRenderType('', ViewEncapsulation.Emulated, styles$DashboardComponent);
     setupComponentType(_renderType);
   }
   @override
   ComponentRef<import2.DashboardComponent> build() {
-    final import3.HtmlElement parentRenderNode = initViewRoot(rootEl);
+    final _rootEl = rootEl;
+    final import3.HtmlElement parentRenderNode = initViewRoot(_rootEl);
     var doc = import3.document;
     _el_0 = createAndAppend(doc, 'h3', parentRenderNode);
     addShimE(_el_0);
@@ -117,7 +118,7 @@ class ViewDashboardComponent0 extends AppView<import2.DashboardComponent> {
   }
 }
 
-AppView<import2.DashboardComponent> viewFactory_DashboardComponent0(AppView<dynamic> parentView, num parentIndex) {
+AppView<import2.DashboardComponent> viewFactory_DashboardComponent0(AppView<dynamic> parentView, int parentIndex) {
   return new ViewDashboardComponent0(parentView, parentIndex);
 }
 
@@ -129,7 +130,7 @@ class _ViewDashboardComponent1 extends AppView<import2.DashboardComponent> {
   import3.Text _text_3;
   String _expr_0;
   var _expr_1;
-  _ViewDashboardComponent1(AppView<dynamic> parentView, num parentIndex) : super(import10.ViewType.EMBEDDED, {'\$implicit': null}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  _ViewDashboardComponent1(AppView<dynamic> parentView, int parentIndex) : super(import10.ViewType.EMBEDDED, {'\$implicit': null}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     componentType = ViewDashboardComponent0._renderType;
   }
   @override
@@ -154,7 +155,7 @@ class _ViewDashboardComponent1 extends AppView<import2.DashboardComponent> {
   @override
   void detectChangesInternal() {
     final import20.Hero local_hero = locals['\$implicit'];
-    final currVal_0 = import12.interpolate1('/detail/', local_hero.id, '');
+    final currVal_0 = import12.interpolate1('/heroes/', local_hero.id, '');
     if (!identical(_expr_0, currVal_0)) {
       _RouterLink_0_5.instance.routerLink = currVal_0;
       _expr_0 = currVal_0;
@@ -173,7 +174,7 @@ class _ViewDashboardComponent1 extends AppView<import2.DashboardComponent> {
   }
 }
 
-AppView<import2.DashboardComponent> viewFactory_DashboardComponent1(AppView<dynamic> parentView, num parentIndex) {
+AppView<import2.DashboardComponent> viewFactory_DashboardComponent1(AppView<dynamic> parentView, int parentIndex) {
   return new _ViewDashboardComponent1(parentView, parentIndex);
 }
 
@@ -182,7 +183,7 @@ const List<dynamic> styles$DashboardComponentHost = const [];
 class _ViewDashboardComponentHost0 extends AppView<dynamic> {
   ViewDashboardComponent0 _compView_0;
   import2.DashboardComponent _DashboardComponent_0_5;
-  _ViewDashboardComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import10.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
+  _ViewDashboardComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import10.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewDashboardComponent0(this, 0);
@@ -208,7 +209,7 @@ class _ViewDashboardComponentHost0 extends AppView<dynamic> {
   }
 }
 
-AppView viewFactory_DashboardComponentHost0(AppView<dynamic> parentView, num parentIndex) {
+AppView viewFactory_DashboardComponentHost0(AppView<dynamic> parentView, int parentIndex) {
   return new _ViewDashboardComponentHost0(parentView, parentIndex);
 }
 

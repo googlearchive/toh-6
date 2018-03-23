@@ -28,7 +28,7 @@ void initReflector() {
   _ngRef.registerFactory(PathLocationStrategy, (_i1.PlatformLocation p0, String p1) => new PathLocationStrategy(p0, p1));
   _ngRef.registerDependencies(PathLocationStrategy, const [
     const [_i1.PlatformLocation],
-    const [const _ngRef.Inject(const _i2.OpaqueToken<dynamic>('appBaseHref')), const _ngRef.Optional()]
+    const [const _ngRef.Inject(const _i2.OpaqueToken<String>('appBaseHref')), const _ngRef.Optional()]
   ]);
   _ref0.initReflector();
   _ref1.initReflector();

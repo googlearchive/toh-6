@@ -10,8 +10,8 @@ import 'hero_search_component.dart';
 @Component(
   selector: 'my-dashboard',
   templateUrl: 'dashboard_component.html',
-  styleUrls: const ['dashboard_component.css'],
-  directives: const [coreDirectives, HeroSearchComponent, routerDirectives],
+  styleUrls: ['dashboard_component.css'],
+  directives: [coreDirectives, HeroSearchComponent, routerDirectives],
 )
 class DashboardComponent implements OnInit {
   List<Hero> heroes;
@@ -20,7 +20,7 @@ class DashboardComponent implements OnInit {
 
   DashboardComponent(this._heroService);
 
-  Future<Null> ngOnInit() async {
-    heroes = (await _heroService.getHeroes()).skip(1).take(4).toList();
+  Future<void> ngOnInit() async {
+    heroes = (await _heroService.getAll()).skip(1).take(4).toList();
   }
 }

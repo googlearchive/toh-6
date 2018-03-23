@@ -116,7 +116,7 @@ ContextBuilderOptions createContextBuilderOptions(ArgResults args,
   // Declared variables.
   //
   Map<String, String> declaredVariables = <String, String>{};
-  List<String> variables = args[defineVariableOption] as List<String>;
+  List<String> variables = (args[defineVariableOption] as List).cast<String>();
   for (String variable in variables) {
     int index = variable.indexOf('=');
     if (index < 0) {
@@ -168,32 +168,36 @@ DartSdkManager createDartSdkManager(
  * then remove the [ddc] named argument from this method.
  */
 void defineAnalysisArguments(ArgParser parser, {bool hide: true, ddc: false}) {
-  parser.addOption(sdkPathOption, help: 'The path to the Dart SDK.');
+  parser.addOption(sdkPathOption,
+      help: 'The path to the Dart SDK.', hide: ddc && hide);
   parser.addOption(analysisOptionsFileOption,
-      help: 'Path to an analysis options file.');
+      help: 'Path to an analysis options file.', hide: ddc && hide);
   parser.addOption(packageRootOption,
       help: 'The path to a package root directory (deprecated). '
-          'This option cannot be used with --packages.');
+          'This option cannot be used with --packages.',
+      hide: ddc && hide);
   parser.addFlag(strongModeFlag,
       help: 'Enable strong static checks (https://goo.gl/DqcBsw).',
-      defaultsTo: ddc);
+      defaultsTo: ddc,
+      hide: ddc);
   parser.addFlag(declarationCastsFlag,
       negatable: true,
-      help:
-          'Disable declaration casts in strong mode (https://goo.gl/cTLz40).');
+      help: 'Disable declaration casts in strong mode (https://goo.gl/cTLz40).',
+      hide: ddc && hide);
   parser.addFlag(implicitCastsFlag,
       negatable: true,
-      help: 'Disable implicit casts in strong mode (https://goo.gl/cTLz40).');
+      help: 'Disable implicit casts in strong mode (https://goo.gl/cTLz40).',
+      hide: ddc && hide);
   parser.addFlag(noImplicitDynamicFlag,
       negatable: false,
-      help: 'Disable implicit dynamic (https://goo.gl/m0UgXD).');
+      help: 'Disable implicit dynamic (https://goo.gl/m0UgXD).',
+      hide: ddc && hide);
 
   //
   // Hidden flags and options.
   //
-  parser.addOption(defineVariableOption,
+  parser.addMultiOption(defineVariableOption,
       abbr: 'D',
-      allowMultiple: true,
       help: 'Define environment variables. For example, "-Dfoo=bar" defines an '
           'environment variable named "foo" whose value is "bar".',
       hide: hide);
@@ -286,7 +290,7 @@ List<String> filterUnknownArguments(List<String> args, ArgParser parser) {
   Set<String> knownAbbreviations = new HashSet<String>();
   parser.options.forEach((String name, Option option) {
     knownOptions.add(name);
-    String abbreviation = option.abbreviation;
+    String abbreviation = option.abbr;
     if (abbreviation != null) {
       knownAbbreviations.add(abbreviation);
     }

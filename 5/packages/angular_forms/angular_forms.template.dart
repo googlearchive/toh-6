@@ -6,13 +6,11 @@
 import 'angular_forms.dart';
 export 'angular_forms.dart';
 import 'src/directives/radio_control_value_accessor.dart' show RadioControlRegistry;
-import 'src/form_builder.dart' show FormBuilder;
 import 'src/directives.template.dart' as _ref0;
 import 'src/directives/radio_control_value_accessor.template.dart' as _ref1;
 import 'src/form_builder.template.dart' as _ref2;
-import 'src/form_builder.template.dart' as _ref3;
-import 'src/model.template.dart' as _ref4;
-import 'src/validators.template.dart' as _ref5;
+import 'src/model.template.dart' as _ref3;
+import 'src/validators.template.dart' as _ref4;
 
 var _visited = false;
 void initReflector() {
@@ -26,5 +24,4 @@ void initReflector() {
   _ref2.initReflector();
   _ref3.initReflector();
   _ref4.initReflector();
-  _ref5.initReflector();
 }

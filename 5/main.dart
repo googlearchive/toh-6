@@ -11,10 +11,10 @@ void main() {
       AppComponent,
       [
         routerProvidersHash, // You can use routerProviders in production
-        provide(Client, useClass: InMemoryDataService),
+        const ClassProvider(Client, useClass: InMemoryDataService),
         // Using a real back end?
-        // Import browser_client.dart and change the above to:
-        // [provide(Client, useFactory: () => new BrowserClient(), deps: [])]
+        // Import 'package:http/browser_client.dart' and change the above to:
+        // const FactoryProvider(Client, () => new BrowserClient()),
       ],
       ng.initReflector);
 }
@@ -24,7 +24,7 @@ import 'package:http/browser_client.dart';
 void main() {
   bootstrap(AppComponent, [
     routerProvidersHash, // You can use routerProviders in production
-    provide(BrowserClient, useFactory: () => new BrowserClient(), deps: [])
+    const FactoryProvider(Client, () => new BrowserClient()),
   ]);
 }
 */

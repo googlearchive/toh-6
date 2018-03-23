@@ -9,6 +9,8 @@ import 'package:crypto/crypto.dart';
 import 'package:glob/glob.dart';
 import 'package:meta/meta.dart';
 
+import '../generate/phase.dart';
+
 /// A node in the asset graph which may be an input to other assets.
 abstract class AssetNode {
   final AssetId id;
@@ -20,6 +22,10 @@ abstract class AssetNode {
   /// The [AssetId]s of all generated assets which are output by a [Builder]
   /// which reads this asset.
   final Set<AssetId> outputs = new Set<AssetId>();
+
+  /// The [AssetId]s of all [PostProcessAnchorNode] assets for which this node
+  /// is the primary input.
+  final Set<AssetId> anchorOutputs = new Set<AssetId>();
 
   /// The [Digest] for this node in its last known state.
   ///
@@ -213,4 +219,30 @@ class PlaceHolderAssetNode extends AssetNode with SyntheticAssetNode {
 
   @override
   String toString() => 'PlaceHolderAssetNode: $id';
+}
+
+/// A [SyntheticAssetNode] which is created for each [primaryInput] to a
+/// [PostBuildAction].
+///
+/// The [outputs] of this node are the individual outputs created for the
+/// [primaryInput] during the [PostBuildAction] at index [actionNumber].
+class PostProcessAnchorNode extends AssetNode with SyntheticAssetNode {
+  final int actionNumber;
+  final AssetId builderOptionsId;
+  final AssetId primaryInput;
+  Digest previousInputsDigest;
+
+  PostProcessAnchorNode(
+      AssetId id, this.primaryInput, this.actionNumber, this.builderOptionsId,
+      {this.previousInputsDigest})
+      : super._forMixins(id);
+
+  factory PostProcessAnchorNode.forInputAndAction(
+      AssetId primaryInput, int actionNumber, AssetId builderOptionsId) {
+    return new PostProcessAnchorNode(
+        primaryInput.addExtension('.post_anchor.$actionNumber'),
+        primaryInput,
+        actionNumber,
+        builderOptionsId);
+  }
 }

@@ -13,11 +13,10 @@ import '../backend/group.dart';
 import '../backend/invoker.dart';
 import '../backend/live_test.dart';
 import '../backend/metadata.dart';
-import '../backend/operating_system.dart';
 import '../backend/stack_trace_formatter.dart';
 import '../backend/suite.dart';
+import '../backend/suite_platform.dart';
 import '../backend/test.dart';
-import '../backend/test_platform.dart';
 import '../util/remote_exception.dart';
 import '../utils.dart';
 import 'suite_channel_manager.dart';
@@ -61,6 +60,10 @@ class RemoteListener {
       if (printZone != null) printZone.print(line);
       channel.sink.add({"type": "print", "line": line});
     });
+
+    // Work-around for https://github.com/dart-lang/sdk/issues/32556. Remove
+    // once fixed.
+    new Stream.fromIterable([]).listen((_) {}).cancel();
 
     new SuiteChannelManager().asCurrent(() {
       new StackTraceFormatter().asCurrent(() {
@@ -115,10 +118,7 @@ class RemoteListener {
           await declarer.declare(main);
 
           var suite = new Suite(declarer.build(),
-              platform: new TestPlatform.deserialize(message['platform']),
-              os: message['os'] == null
-                  ? null
-                  : OperatingSystem.find(message['os']),
+              new SuitePlatform.deserialize(message['platform']),
               path: message['path']);
 
           runZoned(() {

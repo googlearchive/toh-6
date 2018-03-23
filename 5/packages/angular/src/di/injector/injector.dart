@@ -1,6 +1,8 @@
 import 'package:meta/meta.dart';
 
 import '../errors.dart' as errors;
+import '../module.dart';
+
 import 'empty.dart';
 import 'hierarchical.dart';
 import 'map.dart';
@@ -18,6 +20,25 @@ Null throwsNotFound(Injector injector, Object token) {
 }
 
 /// Defines a function that creates an injector around a [parent] injector.
+///
+/// An [InjectorFactory] can be as simple as a closure or function:
+/// ```dart
+/// class Example {}
+///
+/// /// Returns an [Injector] that provides an `Example` service.
+/// Injector createInjector([Injector parent]) {
+///   return new Injector.map({
+///     Example: new Example(),
+///   }, parent);
+/// }
+///
+/// void main() {
+///   var injector = createInjector();
+///   print(injector.get(Example)); // 'Instance of Example'.
+/// }
+/// ```
+///
+/// You may also _generate_ an [InjectorFactory] using [GenerateInjector].
 typedef InjectorFactory = Injector Function([Injector parent]);
 
 /// Support for imperatively loading dependency injected services at runtime.
@@ -44,25 +65,6 @@ abstract class Injector {
     Map<Object, Object> providers, [
     HierarchicalInjector parent,
   ]) = MapInjector;
-
-  /// Creates a new [Injector] that resolves `Provider` instances at runtime.
-  ///
-  /// **EXPERIMENTAL**: Not yet supported.
-  ///
-  /// This is an **expensive** operation without any sort of caching or
-  /// optimizations that manually walks the nested [providersOrLists], and uses
-  /// a form of runtime reflection to figure out how to map the providers to
-  /// runnable code.
-  ///
-  /// Using this function can **disable all tree-shaking** for any `@Injectable`
-  /// annotated function or class in your _entire_ transitive application, and
-  /// is provided for legacy compatibility only.
-  @experimental
-  factory Injector.slowReflective(
-    List<Object> providersOrLists, [
-    HierarchicalInjector parent = const EmptyInjector(),
-  ]) =>
-      ReflectiveInjector.resolveAndCreate(providersOrLists, parent);
 
   /// Returns an instance from the injector based on the provided [token].
   ///
@@ -127,4 +129,10 @@ class GenerateInjector {
   final List<Object> _providersOrModules;
 
   const GenerateInjector(this._providersOrModules);
+
+  /// Generate an [Injector] from [Module]s instead of untyped lists.
+  @experimental
+  const factory GenerateInjector.fromModules(
+    List<Module> modules,
+  ) = GenerateInjector;
 }

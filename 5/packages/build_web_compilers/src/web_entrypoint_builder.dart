@@ -15,6 +15,7 @@ import 'dev_compiler_bootstrap.dart';
 const ddcBootstrapExtension = '.dart.bootstrap.js';
 const jsEntrypointExtension = '.dart.js';
 const jsEntrypointSourceMapExtension = '.dart.js.map';
+const jsEntrypointArchiveExtension = '.dart.js.tar.gz';
 
 /// Which compiler to use when compiling web entrypoints.
 enum WebCompiler {
@@ -90,7 +91,8 @@ class WebEntrypointBuilder implements Builder {
     '.dart': const [
       ddcBootstrapExtension,
       jsEntrypointExtension,
-      jsEntrypointSourceMapExtension
+      jsEntrypointSourceMapExtension,
+      jsEntrypointArchiveExtension,
     ],
   };
 
@@ -129,7 +131,7 @@ Future<bool> _isAppEntryPoint(AssetId dartId, AssetReader reader) async {
   // but has a part that does, or it exports a `main` from another library.
   return parsed.declarations.any((node) {
     return node is FunctionDeclaration &&
-        node.name.name == "main" &&
+        node.name.name == 'main' &&
         node.functionExpression.parameters.parameters.length <= 2;
   });
 }

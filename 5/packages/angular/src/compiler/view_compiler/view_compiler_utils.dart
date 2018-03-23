@@ -28,13 +28,6 @@ const bool outlinerDeprecated = false;
 /// Variable name used to read viewData.parentIndex in build functions.
 const String cachedParentIndexVarName = 'parentIdx';
 
-/// Component dependency and associated identifier.
-class ViewCompileDependency {
-  CompileDirectiveMetadata comp;
-  CompileIdentifierMetadata factoryPlaceholder;
-  ViewCompileDependency(this.comp, this.factoryPlaceholder);
-}
-
 // Creates method parameters list for AppView set attribute calls.
 List<o.Expression> createSetAttributeParams(o.Expression renderNode,
     String attrNs, String attrName, o.Expression valueExpr) {
@@ -69,7 +62,7 @@ o.Expression getPropertyInView(
 
     if (readMemberExpr != null) {
       // Note: Don't cast for members of the AppView base class...
-      if (definedView.nameResolver.fields
+      if (definedView.storage.fields
               .any((field) => field.name == readMemberExpr.name) ||
           definedView.getters
               .any((field) => field.name == readMemberExpr.name)) {
@@ -137,12 +130,14 @@ o.Expression createDebugInfoTokenExpression(CompileTokenMetadata token) {
   }
 }
 
-o.Expression createFlatArray(List<o.Expression> expressions) {
+o.Expression createFlatArray(List<o.Expression> expressions,
+    {bool constForEmpty: true}) {
   // Simplify: No items.
   if (expressions.isEmpty) {
     return o.literalArr(
       const [],
-      new o.ArrayType(null, const [o.TypeModifier.Const]),
+      new o.ArrayType(
+          null, constForEmpty ? const [o.TypeModifier.Const] : const []),
     );
   }
   // Check for [].addAll([x,y,z]) case and optimize.

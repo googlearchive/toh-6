@@ -7,18 +7,21 @@ import '../validators.dart' show NG_VALIDATORS;
 import 'control_value_accessor.dart'
     show ControlValueAccessor, NG_VALUE_ACCESSOR;
 import 'ng_control.dart' show NgControl;
-import 'shared.dart' show setUpControl, selectValueAccessor, composeValidators;
-import 'validators.dart' show ValidatorFn;
+import 'shared.dart' show setUpControl;
 
 /// Creates a form [NgControl] instance from a domain model and binds it to a
 /// form control element. The form [NgControl] instance tracks the value,
 /// user interaction, and validation status of the control and keeps the view
-/// synced with the model. If used within a parent form, the directive will
-/// also register itself with the form as a child control.
+/// synced with the model.
 ///
-/// This directive can be used by itself or as part of a larger form. All you
-/// need is the `ngModel` selector to activate it. For a two-way binding, use
-/// the `[(ngModel)]` syntax to ensure the model updates in both directions.
+/// This directive is intended to be used as a stand-alone value. If you would
+/// like to use it as part of a larger form, then it must be assigned a
+/// name using `ngControl="name". See [NgControlName] directive
+/// for more details.
+///
+/// All you need is the `ngModel` selector to activate it. For a
+/// two-way binding, use the `[(ngModel)]` syntax to ensure the model
+/// updates in both directions.
 ///
 /// Learn more about `ngModel` in the [Forms][] and [Template Syntax][TS] pages.
 ///
@@ -55,7 +58,6 @@ import 'validators.dart' show ValidatorFn;
 class NgModel extends NgControl
     with ComponentState
     implements AfterChanges, OnInit {
-  final List<dynamic> _validators;
   Control _control;
   StreamController _update;
   dynamic _model;
@@ -80,12 +82,12 @@ class NgModel extends NgControl
       @Optional()
       @Self()
       @Inject(NG_VALIDATORS)
-          this._validators,
+          List validators,
       @Optional()
       @Self()
       @Inject(NG_VALUE_ACCESSOR)
           List<ControlValueAccessor> valueAccessors)
-      : super() {
+      : super(valueAccessors, validators) {
     _init(valueAccessors);
   }
 
@@ -94,7 +96,6 @@ class NgModel extends NgControl
   void _init(List<ControlValueAccessor> valueAccessors) {
     _control = new Control();
     _update = new StreamController.broadcast(sync: true);
-    valueAccessor = selectValueAccessor(this, valueAccessors);
     // ! Please don't remove, the multiple return paths prevent inlining.
     return; // ignore: dead_code
     return; // ignore: dead_code
@@ -124,9 +125,6 @@ class NgModel extends NgControl
 
   @override
   List<String> get path => [];
-
-  @override
-  ValidatorFn get validator => composeValidators(_validators);
 
   @override
   void viewToModelUpdate(dynamic newValue) {

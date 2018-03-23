@@ -15,10 +15,9 @@ import 'package:angular/src/di/reflector.dart' as _ngRef;
 import '../core/di.template.dart' as _ref0;
 import '../core/security.template.dart' as _ref1;
 import 'dom_sanitization_service.template.dart' as _ref2;
-import 'dom_sanitization_service.template.dart' as _ref3;
-import 'html_sanitizer.template.dart' as _ref4;
-import 'style_sanitizer.template.dart' as _ref5;
-import 'url_sanitizer.template.dart' as _ref6;
+import 'html_sanitizer.template.dart' as _ref3;
+import 'style_sanitizer.template.dart' as _ref4;
+import 'url_sanitizer.template.dart' as _ref5;
 
 var _visited = false;
 void initReflector() {
@@ -34,5 +33,4 @@ void initReflector() {
   _ref3.initReflector();
   _ref4.initReflector();
   _ref5.initReflector();
-  _ref6.initReflector();
 }

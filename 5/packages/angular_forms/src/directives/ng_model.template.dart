@@ -11,15 +11,13 @@ import '../model.dart' show Control;
 import '../validators.dart' show NG_VALIDATORS;
 import 'control_value_accessor.dart' show ControlValueAccessor, NG_VALUE_ACCESSOR;
 import 'ng_control.dart' show NgControl;
-import 'shared.dart' show setUpControl, selectValueAccessor, composeValidators;
-import 'validators.dart' show ValidatorFn;
+import 'shared.dart' show setUpControl;
 import '../model.template.dart' as _ref0;
 import '../validators.template.dart' as _ref1;
 import 'control_value_accessor.template.dart' as _ref2;
 import 'ng_control.template.dart' as _ref3;
 import 'package:angular/angular.template.dart' as _ref4;
 import 'shared.template.dart' as _ref5;
-import 'validators.template.dart' as _ref6;
 
 var _visited = false;
 void initReflector() {
@@ -34,5 +32,4 @@ void initReflector() {
   _ref3.initReflector();
   _ref4.initReflector();
   _ref5.initReflector();
-  _ref6.initReflector();
 }

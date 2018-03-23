@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:stream_transform/stream_transform.dart';
+import 'route_paths.dart' as paths;
 import 'hero_search_service.dart';
 import 'hero.dart';
 import 'package:angular/src/di/reflector.dart' as _ngRef;
@@ -16,6 +17,7 @@ import 'hero.template.dart' as _ref0;
 import 'hero_search_service.template.dart' as _ref1;
 import 'package:angular/angular.template.dart' as _ref2;
 import 'package:angular_router/angular_router.template.dart' as _ref3;
+import 'route_paths.template.dart' as _ref4;
 import 'package:angular_tour_of_heroes/src/hero_search_component.css.shim.dart' as import0;
 import 'package:angular/src/core/linker/app_view.dart';
 import 'hero_search_component.dart' as import2;
@@ -45,14 +47,15 @@ class ViewHeroSearchComponent0 extends AppView<import2.HeroSearchComponent> {
   var _expr_0;
   import6.AsyncPipe _pipe_async_0;
   static RenderComponentType _renderType;
-  ViewHeroSearchComponent0(AppView<dynamic> parentView, num parentIndex) : super(import8.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  ViewHeroSearchComponent0(AppView<dynamic> parentView, int parentIndex) : super(import8.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     rootEl = import3.document.createElement('hero-search');
     _renderType ??= import10.appViewUtils.createRenderType('', ViewEncapsulation.Emulated, styles$HeroSearchComponent);
     setupComponentType(_renderType);
   }
   @override
   ComponentRef<import2.HeroSearchComponent> build() {
-    final import3.HtmlElement parentRenderNode = initViewRoot(rootEl);
+    final _rootEl = rootEl;
+    final import3.HtmlElement parentRenderNode = initViewRoot(_rootEl);
     var doc = import3.document;
     _el_0 = createDivAndAppend(doc, parentRenderNode);
     createAttr(_el_0, 'id', 'search-component');
@@ -107,7 +110,7 @@ class ViewHeroSearchComponent0 extends AppView<import2.HeroSearchComponent> {
   }
 }
 
-AppView<import2.HeroSearchComponent> viewFactory_HeroSearchComponent0(AppView<dynamic> parentView, num parentIndex) {
+AppView<import2.HeroSearchComponent> viewFactory_HeroSearchComponent0(AppView<dynamic> parentView, int parentIndex) {
   return new ViewHeroSearchComponent0(parentView, parentIndex);
 }
 
@@ -115,7 +118,7 @@ class _ViewHeroSearchComponent1 extends AppView<import2.HeroSearchComponent> {
   import3.DivElement _el_0;
   import3.Text _text_1;
   var _expr_0;
-  _ViewHeroSearchComponent1(AppView<dynamic> parentView, num parentIndex) : super(import8.ViewType.EMBEDDED, {'\$implicit': null}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  _ViewHeroSearchComponent1(AppView<dynamic> parentView, int parentIndex) : super(import8.ViewType.EMBEDDED, {'\$implicit': null}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     componentType = ViewHeroSearchComponent0._renderType;
   }
   @override
@@ -147,7 +150,7 @@ class _ViewHeroSearchComponent1 extends AppView<import2.HeroSearchComponent> {
   }
 }
 
-AppView<import2.HeroSearchComponent> viewFactory_HeroSearchComponent1(AppView<dynamic> parentView, num parentIndex) {
+AppView<import2.HeroSearchComponent> viewFactory_HeroSearchComponent1(AppView<dynamic> parentView, int parentIndex) {
   return new _ViewHeroSearchComponent1(parentView, parentIndex);
 }
 
@@ -157,7 +160,7 @@ class _ViewHeroSearchComponentHost0 extends AppView<dynamic> {
   ViewHeroSearchComponent0 _compView_0;
   import13.HeroSearchService _HeroSearchService_0_5;
   import2.HeroSearchComponent _HeroSearchComponent_0_6;
-  _ViewHeroSearchComponentHost0(AppView<dynamic> parentView, num parentIndex) : super(import8.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
+  _ViewHeroSearchComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import8.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewHeroSearchComponent0(this, 0);
@@ -192,7 +195,7 @@ class _ViewHeroSearchComponentHost0 extends AppView<dynamic> {
   }
 }
 
-AppView viewFactory_HeroSearchComponentHost0(AppView<dynamic> parentView, num parentIndex) {
+AppView viewFactory_HeroSearchComponentHost0(AppView<dynamic> parentView, int parentIndex) {
   return new _ViewHeroSearchComponentHost0(parentView, parentIndex);
 }
 
@@ -210,4 +213,5 @@ void initReflector() {
   _ref1.initReflector();
   _ref2.initReflector();
   _ref3.initReflector();
+  _ref4.initReflector();
 }

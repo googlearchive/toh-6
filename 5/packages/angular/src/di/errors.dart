@@ -1,4 +1,4 @@
-import 'package:angular/src/facade/lang.dart';
+import 'package:angular/src/runtime.dart';
 import 'package:meta/meta.dart';
 
 /// Current stack of tokens being requested for an injection.
@@ -17,11 +17,7 @@ List<Object> _tokenStack;
 /// ```
 void debugInjectorEnter(Object token) {
   // Tree-shake out in Dart2JS.
-  if (!assertionsEnabled()) {
-    return;
-  }
-  // Don't affect performance (as much) when this feature isn't enabled.
-  if (!InjectionError.enableBetterErrors) {
+  if (!isDevMode) {
     return;
   }
   if (_tokenStack == null) {
@@ -34,7 +30,7 @@ void debugInjectorEnter(Object token) {
 /// In debug mode, trace leaving an injection lookup (successfully).
 void debugInjectorLeave(Object token) {
   // Tree-shake out in Dart2JS.
-  if (!assertionsEnabled()) {
+  if (!isDevMode) {
     return;
   }
   // Don't affect performance (as much) when this feature isn't enabled.
@@ -46,9 +42,9 @@ void debugInjectorLeave(Object token) {
 
 /// Returns an error describing that [token] was not found as a provider.
 Error noProviderError(Object token) {
-  // Only in developer mode, and only when a flag is set.
+  // Only in developer mode.
   // There are already users relying on an ArgumentError _always_ being thrown.
-  if (assertionsEnabled() && InjectionError.enableBetterErrors) {
+  if (isDevMode) {
     final error = new NoProviderError._(token, _tokenStack);
     // IMPORTANT: Clears the stack after reporting the error.
     _tokenStack = null;

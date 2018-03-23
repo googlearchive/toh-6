@@ -5,7 +5,7 @@
 // ignore_for_file: cancel_subscriptions,constant_identifier_names,duplicate_import,non_constant_identifier_names,library_prefixes,UNUSED_IMPORT,UNUSED_SHOWN_NAME
 import 'control_container.dart';
 export 'control_container.dart';
-import '../model.dart' show AbstractControl;
+import '../model.dart' show ControlGroup;
 import 'abstract_control_directive.dart' show AbstractControlDirective;
 import 'form_interface.dart' show Form;
 import '../model.template.dart' as _ref0;

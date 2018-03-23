@@ -5,7 +5,6 @@ import 'package:angular/src/runtime.dart';
 import 'package:meta/meta.dart';
 
 import '../facade/exceptions.dart' show BaseException, ExceptionHandler;
-import '../facade/lang.dart' show assertionsEnabled;
 import '../platform/dom/shared_styles_host.dart';
 import 'application_tokens.dart' show PLATFORM_INITIALIZER, APP_INITIALIZER;
 import 'change_detection/change_detector_ref.dart';
@@ -29,7 +28,7 @@ import 'zone/ng_zone.dart' show NgZone, NgZoneError;
 // ignore_for_file: return_of_invalid_type
 
 /// Create an Angular zone.
-NgZone createNgZone() => new NgZone(enableLongStackTrace: assertionsEnabled());
+NgZone createNgZone() => new NgZone(enableLongStackTrace: isDevMode);
 
 PlatformRefImpl _platform;
 bool _inPlatformCreate = false;
@@ -195,11 +194,11 @@ class PlatformRefImpl extends PlatformRef {
     _viewUpdateCallbacks.add(callback);
     if (_rafScheduled == false) {
       _rafScheduled = true;
-      window.requestAnimationFrame(_onAnimationFrame);
+      scheduleMicrotask(_onAnimationFrame);
     }
   }
 
-  void _onAnimationFrame(num _) {
+  void _onAnimationFrame() {
     int i = 0;
     try {
       while (i < _targetViews.length) {
@@ -310,7 +309,7 @@ class ApplicationRefImpl extends ApplicationRef {
 
   ApplicationRefImpl(this._platform, this._zone, this._injector) {
     NgZone zone = _injector.get(NgZone);
-    _enforceNoNewChanges = assertionsEnabled();
+    _enforceNoNewChanges = isDevMode;
     zone.run(() {
       _exceptionHandler = _injector.get(ExceptionHandler);
     });

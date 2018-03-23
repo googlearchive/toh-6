@@ -22,7 +22,7 @@ Future<Null> bootstrapDdc(BuildStep buildStep,
   ignoreCastFailures ??= true;
   var dartEntrypointId = buildStep.inputId;
   var moduleId = buildStep.inputId.changeExtension(moduleExtension);
-  var module = new Module.fromJson(JSON
+  var module = new Module.fromJson(json
       .decode(await buildStep.readAsString(moduleId)) as Map<String, dynamic>);
 
   if (buildRootAppSummary) await buildStep.canRead(module.linkedSummaryId);
@@ -54,7 +54,7 @@ Future<Null> bootstrapDdc(BuildStep buildStep,
 
   // Map from module name to module path for custom modules.
   var modulePaths = {'dart_sdk': 'packages/\$sdk/dev_compiler/amd/dart_sdk'};
-  List<AssetId> transitiveJsModules = [jsId]
+  var transitiveJsModules = [jsId]
     ..addAll(transitiveDeps.map((dep) => dep.jsId(jsModuleExtension)));
   for (var jsId in transitiveJsModules) {
     // Strip out the top level dir from the path for any module, and set it to
@@ -90,7 +90,7 @@ Future<List<Module>> _ensureTransitiveModules(
     Module module, AssetReader reader) async {
   // Collect all the modules this module depends on, plus this module.
   var transitiveDeps = await module.computeTransitiveDependencies(reader);
-  List<AssetId> jsModules = transitiveDeps
+  var jsModules = transitiveDeps
       .map((module) => module.jsId(jsModuleExtension))
       .toList()
         ..add(module.jsId(jsModuleExtension));
@@ -137,19 +137,33 @@ String _entryPointJs(String bootstrapModuleName) => '''
 (function() {
   $_currentDirectoryScript
   $_baseUrlScript
-  var el;
-  el = document.createElement("script");
-  el.defer = true;
-  el.async = false;
-  el.src =
-    baseUrl + "packages/\$sdk/dev_compiler/web/dart_stack_trace_mapper.js";
-  document.head.appendChild(el);
-  el = document.createElement("script");
-  el.defer = true;
-  el.async = false;
-  el.src = baseUrl + "packages/\$sdk/dev_compiler/amd/require.js";
-  el.setAttribute("data-main", _currentDirectory + "$bootstrapModuleName");
-  document.head.appendChild(el);
+
+  var mapperUri = baseUrl + "packages/\$sdk/dev_compiler/web/dart_stack_trace_mapper.js";
+  var requireUri = baseUrl + "packages/\$sdk/dev_compiler/amd/require.js";
+  var mainUri = _currentDirectory + "$bootstrapModuleName";
+
+  if (typeof document != 'undefined') {
+    var el = document.createElement("script");
+    el.defer = true;
+    el.async = false;
+    el.src = mapperUri;
+    document.head.appendChild(el);
+
+    el = document.createElement("script");
+    el.defer = true;
+    el.async = false;
+    el.src = requireUri;
+    el.setAttribute("data-main", mainUri);
+    document.head.appendChild(el);
+  } else {
+    importScripts(mapperUri, requireUri);
+    require.config({
+      baseUrl: baseUrl,
+    });
+    // TODO: update bootstrap code to take argument - dart-lang/build#1115
+    window = self;
+    require([mainUri + '.js']);
+  }
 })();
 ''';
 
@@ -234,7 +248,9 @@ $_baseUrlScript
         return dart.getSourceMap(module);
       });
   }
-  window.postMessage({ type: "DDC_STATE_CHANGE", state: "start" }, "*");
+  if (window.postMessage) {
+    window.postMessage({ type: "DDC_STATE_CHANGE", state: "start" }, "*");
+  }
 ''';
 
 /// Require JS config for ddc.

@@ -40,7 +40,7 @@ class DevCompilerBuilder implements Builder {
   @override
   Future build(BuildStep buildStep) async {
     var module = new Module.fromJson(
-        JSON.decode(await buildStep.readAsString(buildStep.inputId))
+        json.decode(await buildStep.readAsString(buildStep.inputId))
             as Map<String, dynamic>);
 
     Future<Null> handleError(e) async {
@@ -142,7 +142,7 @@ Future createDevCompilerModule(
       ..addAll(transitiveSummaryDeps);
     packagesFile = await createPackagesFile(allDeps, scratchSpace);
     request.arguments.addAll([
-      "--packages",
+      '--packages',
       packagesFile.absolute.uri.toString(),
     ]);
   }
