@@ -1,5 +1,8 @@
 analyzer:
   strong-mode: true
+  plugins:
+      angular:
+        enabled: true
   errors:
     uri_has_not_been_generated: ignore
 
