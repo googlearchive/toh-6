@@ -108,7 +108,7 @@ class ViewHeroListComponent0 extends AppView<import2.HeroListComponent> {
       _expr_0 = currVal_0;
     }
     _NgFor_9_9.ngDoCheck();
-    _NgIf_10_9.ngIf = (_ctx.selectedHero != null);
+    _NgIf_10_9.ngIf = (_ctx.selected != null);
     _appEl_9.detectChangesInNestedViews();
     _appEl_10.detectChangesInNestedViews();
   }
@@ -172,7 +172,7 @@ class _ViewHeroListComponent1 extends AppView<import2.HeroListComponent> {
   void detectChangesInternal() {
     final import2.HeroListComponent _ctx = ctx;
     final import14.Hero local_hero = locals['\$implicit'];
-    final currVal_0 = identical(local_hero, _ctx.selectedHero);
+    final currVal_0 = identical(local_hero, _ctx.selected);
     if (!identical(_expr_0, currVal_0)) {
       updateClass(_el_0, 'selected', currVal_0);
       _expr_0 = currVal_0;
@@ -239,7 +239,7 @@ class _ViewHeroListComponent2 extends AppView<import2.HeroListComponent> {
   @override
   void detectChangesInternal() {
     final import2.HeroListComponent _ctx = ctx;
-    final currVal_0 = import11.interpolate0(_pipe_uppercase_0_0(_ctx.selectedHero.name));
+    final currVal_0 = import11.interpolate0(_pipe_uppercase_0_0(_ctx.selected.name));
     if (!identical(_expr_0, currVal_0)) {
       _text_2.text = currVal_0;
       _expr_0 = currVal_0;
