@@ -13,7 +13,7 @@ class HeroesPO extends PageObjectBase {
   @ByTagName('li')
   @WithClass('selected')
   @optional
-  PageLoaderElement get _selectedHero => q('li.selected');
+  PageLoaderElement get _selected => q('li.selected');
 
   @FirstByCss('div h2')
   @optional
@@ -42,8 +42,8 @@ class HeroesPO extends PageObjectBase {
   Future selectHero(int index) => _heroes[index].click();
   Future deleteHero(int index) => _deleteHeroes[index].click();
 
-  Future<Map> get selectedHero =>
-      _selectedHero == null ? null : _heroDataFromLi(_selectedHero);
+  Future<Map> get selected =>
+      _selected == null ? null : _heroDataFromLi(_selected);
 
   Future<String> get myHeroNameInUppercase async {
     if (_miniDetailHeading == null) return null;

@@ -56,7 +56,7 @@ void basicTests() {
   });
 
   test('no selected hero', () async {
-    expect(await po.selectedHero, null);
+    expect(await po.selected, null);
   });
 }
 
@@ -67,7 +67,7 @@ void selectedHeroTests() {
   });
 
   test('is selected', () async {
-    expect(await po.selectedHero, targetHero);
+    expect(await po.selected, targetHero);
   });
 
   test('show mini-detail', () async {
@@ -86,7 +86,7 @@ void selectedHeroTests() {
     await po.selectHero(0);
     po = await new HeroesPO().resolve(fixture);
     final heroData = {'id': 11, 'name': 'Mr. Nice'};
-    expect(await po.selectedHero, heroData);
+    expect(await po.selected, heroData);
   });
 }
 
@@ -106,7 +106,7 @@ void addHeroTests() {
     await po.selectHero(numHeroes);
     po = await new HeroesPO().resolve(fixture);
     expect(po.heroes.length, numHeroes + 1);
-    expect((await po.selectedHero)['name'], newHeroName);
+    expect((await po.selected)['name'], newHeroName);
     expect(await po.myHeroNameInUppercase, equalsIgnoringCase(newHeroName));
   });
 }
