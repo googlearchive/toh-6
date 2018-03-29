@@ -66,7 +66,7 @@ class ViewHeroListComponent0 extends AppView<import2.HeroListComponent> {
     var doc = import3.document;
     _el_0 = createAndAppend(doc, 'h2', parentRenderNode);
     addShimE(_el_0);
-    import3.Text _text_1 = new import3.Text('My Heroes');
+    import3.Text _text_1 = new import3.Text('Heroes');
     _el_0.append(_text_1);
     _el_2 = createDivAndAppend(doc, parentRenderNode);
     addShimC(_el_2);

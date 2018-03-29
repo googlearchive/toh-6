@@ -15158,7 +15158,7 @@ as:function(){var t=this.r
 if(!(t==null))t.c0()},
 $asI:function(){return[A.b2]}}
 M.iZ.prototype={
-W:function(){var t,s,r,q,p,o,n,m,l
+W:function(){var t,s,r,q,p,o,n,m
 t=document
 s=t.createElement("div")
 this.r=s
@@ -15169,16 +15169,14 @@ this.ag(s)
 s=t.createTextNode("")
 this.y=s
 this.x.appendChild(s)
-r=t.createTextNode(" details!")
-this.x.appendChild(r)
 s=S.dK(t,this.r)
 this.z=s
 this.V(s)
 s=S.aj(t,"label",this.z)
 this.Q=s
 this.ag(s)
-q=t.createTextNode("id:")
-this.Q.appendChild(q)
+r=t.createTextNode("id:")
+this.Q.appendChild(r)
 s=t.createTextNode("")
 this.ch=s
 this.z.appendChild(s)
@@ -15188,8 +15186,8 @@ this.V(s)
 s=S.aj(t,"label",this.cx)
 this.cy=s
 this.ag(s)
-p=t.createTextNode("name:")
-this.cy.appendChild(p)
+q=t.createTextNode("name:")
+this.cy.appendChild(q)
 s=S.aj(t,"input",this.cx)
 this.db=s
 s.setAttribute("placeholder","name")
@@ -15198,32 +15196,32 @@ s=new O.cY(this.db,new O.lu(),new O.lv())
 this.dx=s
 s=[s]
 this.dy=s
-o=X.HA(s)
-o=new U.hu(null,null,null,!1,null,null,o,null,null)
-o.kT(s)
-this.fr=o
-o=S.aj(t,"button",this.r)
-this.fx=o
-this.V(o)
-n=t.createTextNode("Back")
-this.fx.appendChild(n)
-o=S.aj(t,"button",this.r)
-this.fy=o
-this.V(o)
-m=t.createTextNode("Save")
-this.fy.appendChild(m)
-o=this.db;(o&&C.C).am(o,"input",this.aE(this.gkI()))
-o=this.db;(o&&C.C).am(o,"blur",this.dv(this.dx.gnu()))
-o=this.fr.f
-o.toString
-l=new P.br(o,[H.l(o,0)]).aT(this.aE(this.gkM()))
-o=this.fx;(o&&C.v).am(o,"click",this.dv(this.f.gje()))
-o=this.fy;(o&&C.v).am(o,"click",this.dv(J.D2(this.f)))
-this.c4([this.r],[l])
+p=X.HA(s)
+p=new U.hu(null,null,null,!1,null,null,p,null,null)
+p.kT(s)
+this.fr=p
+p=S.aj(t,"button",this.r)
+this.fx=p
+this.V(p)
+o=t.createTextNode("Back")
+this.fx.appendChild(o)
+p=S.aj(t,"button",this.r)
+this.fy=p
+this.V(p)
+n=t.createTextNode("Save")
+this.fy.appendChild(n)
+p=this.db;(p&&C.C).am(p,"input",this.aE(this.gkI()))
+p=this.db;(p&&C.C).am(p,"blur",this.dv(this.dx.gnu()))
+p=this.fr.f
+p.toString
+m=new P.br(p,[H.l(p,0)]).aT(this.aE(this.gkM()))
+p=this.fx;(p&&C.v).am(p,"click",this.dv(this.f.gje()))
+p=this.fy;(p&&C.v).am(p,"click",this.dv(J.D2(this.f)))
+this.c4([this.r],[m])
 return},
-cP:function(a,b,c){if(a===C.c6&&11===b)return this.dx
-if(a===C.bJ&&11===b)return this.dy
-if((a===C.ce||a===C.cc)&&11===b)return this.fr
+cP:function(a,b,c){if(a===C.c6&&10===b)return this.dx
+if(a===C.bJ&&10===b)return this.dy
+if((a===C.ce||a===C.cc)&&10===b)return this.fr
 return c},
 aa:function(){var t,s,r,q
 t=this.f
@@ -15304,7 +15302,7 @@ s=document
 r=S.aj(s,"h2",t)
 this.r=r
 this.ag(r)
-q=s.createTextNode("My Heroes")
+q=s.createTextNode("Heroes")
 this.r.appendChild(q)
 r=S.dK(s,t)
 this.x=r
