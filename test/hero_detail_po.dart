@@ -5,7 +5,7 @@ import 'utils.dart';
 
 class HeroDetailPO extends PageObjectBase {
   @FirstByCss('div h2')
-  PageLoaderElement get _title => q('div h2'); // e.g. 'Mr Freeze details!'
+  PageLoaderElement get _title => q('div h2');
 
   @FirstByCss('div div')
   PageLoaderElement get _id => q('div div');
@@ -24,9 +24,7 @@ class HeroDetailPO extends PageObjectBase {
   Future<Map> get heroFromDetails async {
     if (_id == null) return null;
     final idAsString = (await _id.visibleText).split(':')[1];
-    final text = await _title.visibleText;
-    final matches = new RegExp((r'^(.*) details!$')).firstMatch(text);
-    return heroData(idAsString, matches[1]);
+    return heroData(idAsString, await _title.visibleText);
   }
 
   Future clear() => _input.clear();
