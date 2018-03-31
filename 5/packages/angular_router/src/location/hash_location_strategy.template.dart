@@ -8,7 +8,7 @@ export 'hash_location_strategy.dart';
 import 'dart:html' as html;
 import 'package:angular/angular.dart' show Injectable, Inject, Optional;
 import 'location.dart' show Location;
-import 'location_strategy.dart' show LocationStrategy, APP_BASE_HREF;
+import 'location_strategy.dart' show LocationStrategy, appBaseHref;
 import 'platform_location.dart' show PlatformLocation;
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'location.template.dart' as _ref0;

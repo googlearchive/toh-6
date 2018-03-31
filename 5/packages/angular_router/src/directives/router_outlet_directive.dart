@@ -111,19 +111,13 @@ class RouterOutlet implements OnInit, OnDestroy {
     _router.unregisterRootOutlet(this);
   }
 
-  Future<ComponentFactory> _coerceFactory(Object typeOrFactory) async {
-    if (typeOrFactory is ComponentFactory) {
-      return typeOrFactory;
-    }
-    throw new ArgumentError('Invalid type: $typeOrFactory.');
-  }
-
-  /// Instantiates a component [typeOrFactory] to prepare it for rendering.
+  /// Returns the component created by [componentFactory], prepared for routing.
   ///
-  /// Internally maintains a cache of created components.
-  Future<ComponentRef> prepare(ComponentFactory component) async {
-    return _loadedComponents.putIfAbsent(component, () {
-      final componentRef = component.create(new Injector.map({
+  /// If the component is currently active, or reusable, a cached instance will
+  /// be returned instead of creating a new one.
+  ComponentRef prepare(ComponentFactory componentFactory) {
+    return _loadedComponents.putIfAbsent(componentFactory, () {
+      final componentRef = componentFactory.create(new Injector.map({
         RouterOutletToken: new RouterOutletToken(),
       }, _viewContainerRef.injector));
       componentRef.changeDetectorRef.detectChanges();
@@ -131,51 +125,54 @@ class RouterOutlet implements OnInit, OnDestroy {
     });
   }
 
-  /// Activates and renders [component] within the outlet.
+  /// Activates and renders the component created by [componentFactory].
   ///
-  /// Show a component of the given type into the outlet. If that type of
-  /// component hasn't already been created, creates one.
+  /// If the component has already been activated and is reusable, a cached
+  /// instance will be reused instead of creating a new one.
   Future<Null> activate(
-    Object typeOrFactory,
+    ComponentFactory componentFactory,
     RouterState oldState,
     RouterState newState,
   ) async {
-    // Canonical factory for creating an instance of the component.
-    final component = await _coerceFactory(typeOrFactory);
-    var activeInstance = _activeComponent;
-
-    if (activeInstance != null) {
-      if (!await _shouldReuse(activeInstance.instance, oldState, newState)) {
-        _loadedComponents.remove(_activeComponentFactory);
-        activeInstance.destroy();
-        // Clear will the detach and destroy all views.
-        _viewContainerRef.clear();
-      } else {
-        for (int i = _viewContainerRef.length - 1; i >= 0; i--) {
+    final activeComponent = _activeComponent;
+    if (activeComponent != null) {
+      final shouldReuse = await _shouldReuse(
+        activeComponent.instance,
+        oldState,
+        newState,
+      );
+      if (shouldReuse) {
+        // If both routes render the same component, don't detach it from DOM.
+        if (identical(_activeComponentFactory, componentFactory)) return;
+        // Detach the active component, keeping it cached for reuse.
+        for (var i = _viewContainerRef.length - 1; i >= 0; --i) {
           _viewContainerRef.detach(i);
         }
+      } else {
+        // Destroy the active component.
+        _loadedComponents.remove(_activeComponentFactory);
+        activeComponent.destroy();
+        _viewContainerRef.clear();
       }
     }
-
-    // Clear and re-insert the component view.
-    _activeComponentFactory = component;
-    activeInstance = await prepare(component);
-    _viewContainerRef.insert(activeInstance.hostView);
-    activeInstance.changeDetectorRef.detectChanges();
+    // Render the new component in the outlet.
+    _activeComponentFactory = componentFactory;
+    final component = prepare(componentFactory);
+    _viewContainerRef.insert(component.hostView);
+    component.changeDetectorRef.detectChanges();
   }
 
-  Future<bool> _shouldReuse(
+  FutureOr<bool> _shouldReuse(
     Object instance,
     RouterState oldState,
     RouterState newState,
-  ) async {
+  ) {
     if (instance is CanReuse) {
-      return await instance.canReuse(oldState, newState);
+      return instance.canReuse(oldState, newState);
     }
     if (_routerHook != null) {
-      return await _routerHook.canReuse(instance, oldState, newState);
+      return _routerHook.canReuse(instance, oldState, newState);
     }
-
     return false;
   }
 }

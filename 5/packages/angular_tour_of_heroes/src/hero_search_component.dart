@@ -14,7 +14,7 @@ import 'hero.dart';
   styleUrls: ['hero_search_component.css'],
   directives: [coreDirectives],
   providers: [HeroSearchService],
-  pipes: [COMMON_PIPES],
+  pipes: [commonPipes],
 )
 class HeroSearchComponent implements OnInit {
   HeroSearchService _heroSearchService;
