@@ -22,5 +22,5 @@ you'll have to wait a bit while pub converts the app.
 [dart-doc-syncer](//github.com/dart-lang/dart-doc-syncer) tool.
 If you find a problem with this sample's code, please open an [issue][].
 
-[docs repo]: //github.com/dart-lang/site-webdev/tree/master/examples/ng/doc/toh-6
-[issue]: //github.com/dart-lang/site-webdev/issues/new?title=examples/ng/doc/toh-6
+[docs repo]: //github.com/dart-lang/site-webdev/tree/4.x/examples/ng/doc/toh-6
+[issue]: //github.com/dart-lang/site-webdev/issues/new?title=[4.x]%20examples/ng/doc/toh-6
