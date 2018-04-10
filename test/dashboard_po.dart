@@ -3,21 +3,22 @@ import 'dart:async';
 import 'package:pageloader/objects.dart';
 import 'utils.dart';
 
-class DashboardPO {
+class DashboardPO extends PageObjectBase {
   @FirstByCss('h3')
-  PageLoaderElement _title;
+  PageLoaderElement get _title => q('h3');
 
   @ByTagName('a')
-  List<PageLoaderElement> _heroes;
+  List<PageLoaderElement> get _heroes => qq('a');
 
   @ByTagName('input')
-  PageLoaderElement search;
+  PageLoaderElement get search => q('input');
 
   @ByCss('div[id="search-component"] div div')
-  List<PageLoaderElement> _heroesFound;
+  List<PageLoaderElement> get _heroesFound =>
+      qq('div[id="search-component"] div div');
 
   @ByCss('div[id="search-component"]')
-  PageLoaderElement heroSearchDiv;
+  PageLoaderElement get heroSearchDiv => q('div[id="search-component"]');
 
   Future<String> get title => _title.visibleText;
 

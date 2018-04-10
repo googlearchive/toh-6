@@ -1,5 +1,4 @@
 @Skip('AppComponent tests need bootstrap equivalent for the Router init')
-@Tags(const ['aot'])
 @TestOn('browser')
 
 import 'package:angular/angular.dart';
@@ -10,6 +9,7 @@ import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
 import 'app_po.dart';
+import 'app_test.template.dart' as ng;
 
 NgTestFixture<AppComponent> fixture;
 AppPO appPO;
@@ -18,12 +18,11 @@ final mockPlatformLocation = new MockPlatformLocation();
 
 class MockPlatformLocation extends Mock implements PlatformLocation {}
 
-@AngularEntrypoint()
 void main() {
+  ng.initReflector();
   final providers = [
-    provide(APP_BASE_HREF, useValue: '/'),
-    provide(ROUTER_PRIMARY_COMPONENT, useValue: AppComponent),
-    provide(PlatformLocation, useValue: mockPlatformLocation),
+    const ValueProvider.forToken(appBaseHref, '/'),
+    new ValueProvider(PlatformLocation, mockPlatformLocation),
   ];
 
   final testBed = new NgTestBed<AppComponent>().addProviders(providers);
@@ -35,7 +34,7 @@ void main() {
 
   setUp(() async {
     fixture = await testBed.create();
-    appPO = await fixture.resolvePageObject(AppPO);
+    appPO = await new AppPO().resolve(fixture);
   });
 
   tearDown(disposeAnyRunningTest);
