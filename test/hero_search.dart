@@ -7,26 +7,32 @@ import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/hero_search_component.dart';
+import 'package:angular_tour_of_heroes/src/hero_search_component.template.dart'
+    as ng;
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
+import 'hero_search.template.dart' as self;
 import 'hero_search_po.dart';
+import 'utils.dart';
 
 NgTestFixture<HeroSearchComponent> fixture;
 HeroSearchPO po;
 
-final mockRouter = new MockRouter();
-
-class MockRouter extends Mock implements Router {}
+@GenerateInjector([
+  const ClassProvider(Client, useClass: InMemoryDataService),
+  const ClassProvider(HeroService),
+  const ClassProvider(Router, useClass: MockRouter),
+])
+final InjectorFactory rootInjector = self.rootInjector$Injector;
 
 void main() {
-  final testBed = new NgTestBed<HeroSearchComponent>().addProviders([
-    const ClassProvider(Client, useClass: InMemoryDataService),
-    const ClassProvider(HeroService),
-    new ValueProvider(Router, mockRouter),
-  ]);
+  final injector = new InjectorProbe(rootInjector);
+  final testBed = NgTestBed.forComponent<HeroSearchComponent>(
+      ng.HeroSearchComponentNgFactory,
+      rootInjector: injector.factory);
 
   setUp(() async {
     InMemoryDataService.resetDb();
@@ -44,10 +50,10 @@ void main() {
     expect(await po.heroNames, []);
   });
 
-  group('Search hero:', heroSearchTests);
+  group('Search hero:', () => heroSearchTests(injector));
 }
 
-void heroSearchTests() {
+void heroSearchTests(InjectorProbe injector) {
   final searchText = 'ma';
 
   setUp(() async {
@@ -70,6 +76,7 @@ void heroSearchTests() {
   });
 
   test('select hero and navigate to detail', () async {
+    final mockRouter = injector.get<MockRouter>(Router);
     clearInteractions(mockRouter);
     await po.selectHero(0);
     final c = verify(mockRouter.navigate(typed(captureAny)));

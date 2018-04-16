@@ -2,6 +2,8 @@ import 'package:angular_router/angular_router.dart';
 import 'package:collection/collection.dart';
 import 'package:test/test.dart';
 
+IsNavParams isNavParams([dynamic expected]) => new IsNavParams(expected);
+
 class IsNavParams extends Matcher {
   NavigationParams _expected;
   IsNavParams([NavigationParams expected]) {

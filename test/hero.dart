@@ -3,27 +3,34 @@
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
+import 'package:angular_tour_of_heroes/src/route_paths.dart' show idParam;
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/hero_component.dart';
+import 'package:angular_tour_of_heroes/src/hero_component.template.dart' as ng;
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
-import 'hero_detail_po.dart';
+import 'hero.template.dart' as self;
+import 'hero_po.dart';
+import 'utils.dart';
 
 NgTestFixture<HeroComponent> fixture;
 HeroDetailPO po;
 
-final mockLocation = new MockLocation();
-final mockRouterState = new MockRouterState();
+@GenerateInjector([
+  const ClassProvider(Client, useClass: InMemoryDataService),
+  const ClassProvider(HeroService),
+  const ClassProvider(Location, useClass: MockLocation),
+])
+final InjectorFactory rootInjector = self.rootInjector$Injector;
 
 void main() {
-  final testBed = new NgTestBed<HeroComponent>().addProviders([
-    const ClassProvider(Client, useClass: InMemoryDataService),
-    const ClassProvider(HeroService),
-    new ValueProvider(Location, mockLocation),
-  ]);
+  final injector = new InjectorProbe(rootInjector);
+  final testBed = NgTestBed.forComponent<HeroComponent>(
+      ng.HeroComponentNgFactory,
+      rootInjector: injector.factory);
 
   setUp(() async {
     fixture = await testBed.create();
@@ -41,16 +48,17 @@ void main() {
   group('${targetHero['name']} initial hero:', () {
     const nameSuffix = 'X';
     final Map updatedHero = {
-      'id': targetHero['id'],
+      'id': targetHero[idParam],
       'name': "${targetHero['name']}$nameSuffix"
     };
 
-    setUpAll(() async {
-      when(mockRouterState.parameters)
-          .thenReturn({'id': '${targetHero['id']}'});
-    });
+    final mockRouterState = new MockRouterState();
+    when(mockRouterState.parameters)
+        .thenReturn({idParam: '${targetHero[idParam]}'});
+    MockLocation mockLocation;
 
     setUp(() async {
+      mockLocation = injector.get<MockLocation>(Location);
       await fixture.update((c) => c.onActivate(null, mockRouterState));
       po = await new HeroDetailPO().resolve(fixture);
       clearInteractions(mockLocation);

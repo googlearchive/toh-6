@@ -3,13 +3,17 @@
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
+import 'package:angular_tour_of_heroes/src/route_paths.dart' show idParam;
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/hero_list_component.dart';
+import 'package:angular_tour_of_heroes/src/hero_list_component.template.dart'
+    as ng;
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
+import 'heroes.template.dart' as self;
 import 'heroes_po.dart';
 import 'utils.dart';
 
@@ -20,16 +24,18 @@ const targetHero = {'id': 15, 'name': 'Magneta'};
 NgTestFixture<HeroListComponent> fixture;
 HeroesPO po;
 
-final mockRouter = new MockRouter();
-
-class MockRouter extends Mock implements Router {}
+@GenerateInjector([
+  const ClassProvider(Client, useClass: InMemoryDataService),
+  const ClassProvider(HeroService),
+  const ClassProvider(Router, useClass: MockRouter),
+])
+final InjectorFactory rootInjector = self.rootInjector$Injector;
 
 void main() {
-  final testBed = new NgTestBed<HeroListComponent>().addProviders([
-    const ClassProvider(Client, useClass: InMemoryDataService),
-    const ClassProvider(HeroService),
-    new ValueProvider(Router, mockRouter),
-  ]);
+  final injector = new InjectorProbe(rootInjector);
+  final testBed = NgTestBed.forComponent<HeroListComponent>(
+      ng.HeroListComponentNgFactory,
+      rootInjector: injector.factory);
 
   setUp(() async {
     InMemoryDataService.resetDb();
@@ -40,7 +46,7 @@ void main() {
   tearDown(disposeAnyRunningTest);
 
   group('Basics:', basicTests);
-  group('Selected hero:', selectedHeroTests);
+  group('Selected hero:', () => selectedHeroTests(injector));
   group('Add hero:', addHeroTests);
   group('Delete hero:', deleteHeroTests);
 }
@@ -51,7 +57,6 @@ void basicTests() {
   });
 
   test('hero count', () async {
-    await fixture.update();
     expect(po.heroes.length, numHeroes);
   });
 
@@ -60,7 +65,7 @@ void basicTests() {
   });
 }
 
-void selectedHeroTests() {
+void selectedHeroTests(InjectorProbe injector) {
   setUp(() async {
     await po.selectHero(targetHeroIndex);
     po = await new HeroesPO().resolve(fixture);
@@ -77,9 +82,9 @@ void selectedHeroTests() {
 
   test('go to detail', () async {
     await po.gotoDetail();
-    await fixture.update();
+    final mockRouter = injector.get<MockRouter>(Router);
     final c = verify(mockRouter.navigate(typed(captureAny)));
-    expect(c.captured.single, '/heroes/${targetHero['id']}');
+    expect(c.captured.single, '/heroes/${targetHero[idParam]}');
   });
 
   test('select another hero', () async {

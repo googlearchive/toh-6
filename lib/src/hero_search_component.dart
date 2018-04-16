@@ -13,7 +13,7 @@ import 'hero.dart';
   templateUrl: 'hero_search_component.html',
   styleUrls: ['hero_search_component.css'],
   directives: [coreDirectives],
-  providers: [HeroSearchService],
+  providers: [const ClassProvider(HeroSearchService)],
   pipes: [commonPipes],
 )
 class HeroSearchComponent implements OnInit {

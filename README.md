@@ -19,5 +19,5 @@ sample. Or run your own copy:
 [dart-doc-syncer](//github.com/dart-lang/dart-doc-syncer) tool.
 If you find a problem with this sample's code, please open an [issue][].
 
-[docs repo]: //github.com/dart-lang/site-webdev/tree/5-dev/examples/ng/doc/toh-6
-[issue]: //github.com/dart-lang/site-webdev/issues/new?title=[5-dev]%20examples/ng/doc/toh-6
+[docs repo]: //github.com/dart-lang/site-webdev/tree/master/examples/ng/doc/toh-6
+[issue]: //github.com/dart-lang/site-webdev/issues/new?title=[master]%20examples/ng/doc/toh-6

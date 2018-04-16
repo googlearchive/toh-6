@@ -39,8 +39,8 @@ class HeroesPO extends PageObjectBase {
 
   Iterable<Future<Map>> get heroes => _heroes.map((el) => _heroDataFromLi(el));
 
-  Future selectHero(int index) => _heroes[index].click();
-  Future deleteHero(int index) => _deleteHeroes[index].click();
+  Future<void> selectHero(int index) => _heroes[index].click();
+  Future<void> deleteHero(int index) => _deleteHeroes[index].click();
 
   Future<Map> get selected =>
       _selected == null ? null : _heroDataFromLi(_selected);
@@ -52,13 +52,13 @@ class HeroesPO extends PageObjectBase {
     return matches[1];
   }
 
-  Future addHero(String name) async {
+  Future<void> addHero(String name) async {
     await _input.clear();
     await _input.type(name);
     return _add.click();
   }
 
-  Future gotoDetail() async => _gotoDetail.click();
+  Future<void> gotoDetail() => _gotoDetail.click();
 
   Future<Map<String, dynamic>> _heroDataFromLi(PageLoaderElement heroLi) async {
     final spans = await heroLi.getElementsByCss('span').toList();
