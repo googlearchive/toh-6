@@ -57,7 +57,7 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
   String _expr_2;
   var _expr_4;
   static RenderComponentType _renderType;
-  ViewAppComponent0(AppView<dynamic> parentView, int parentIndex) : super(import9.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  ViewAppComponent0(AppView<dynamic> parentView, int parentIndex) : super(import9.ViewType.component, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     rootEl = import3.document.createElement('my-app');
     _renderType ??= import11.appViewUtils.createRenderType('', ViewEncapsulation.Emulated, styles$AppComponent);
     setupComponentType(_renderType);
@@ -103,7 +103,7 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
   void detectChangesInternal() {
     final import2.AppComponent _ctx = ctx;
     bool firstCheck = (this.cdState == 0);
-    final currVal_0 = _ctx.routes.dashboard.path;
+    final currVal_0 = _ctx.routes.dashboard.toUrl();
     if (!identical(_expr_0, currVal_0)) {
       _RouterLink_3_5.instance.routerLink = currVal_0;
       _expr_0 = currVal_0;
@@ -111,7 +111,7 @@ class ViewAppComponent0 extends AppView<import2.AppComponent> {
     if (firstCheck) {
       (_RouterLinkActive_3_6.routerLinkActive = 'active');
     }
-    final currVal_2 = _ctx.routes.heroes.path;
+    final currVal_2 = _ctx.routes.heroes.toUrl();
     if (!identical(_expr_2, currVal_2)) {
       _RouterLink_5_5.instance.routerLink = currVal_2;
       _expr_2 = currVal_2;
@@ -160,7 +160,7 @@ class _ViewAppComponentHost0 extends AppView<dynamic> {
   import18.Routes _Routes_0_5;
   import2.AppComponent _AppComponent_0_6;
   import19.HeroService __HeroService_0_7;
-  _ViewAppComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import9.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
+  _ViewAppComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import9.ViewType.host, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   import19.HeroService get _HeroService_0_7 {
     if ((this.__HeroService_0_7 == null)) {
       (__HeroService_0_7 = new import19.HeroService(this.injectorGet(import20.Client, this.viewData.parentIndex)));

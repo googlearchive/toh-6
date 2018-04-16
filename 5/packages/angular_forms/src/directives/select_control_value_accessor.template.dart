@@ -8,7 +8,7 @@ export 'select_control_value_accessor.dart';
 import 'dart:html';
 import 'package:angular/angular.dart';
 import 'package:angular/src/facade/lang.dart' show isPrimitive;
-import 'control_value_accessor.dart' show NG_VALUE_ACCESSOR, ControlValueAccessor;
+import 'control_value_accessor.dart' show ChangeHandler, ControlValueAccessor, NG_VALUE_ACCESSOR, TouchHandler;
 import 'control_value_accessor.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 import 'package:angular/src/facade/lang.template.dart' as _ref2;

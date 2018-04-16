@@ -22,39 +22,28 @@ const DEFAULT_VALUE_ACCESSOR = const ExistingProvider.forToken(
       'textarea[ngFormControl],'
       'input:not([type=checkbox])[ngModel],'
       'textarea[ngModel],[ngDefaultControl]',
-  host: const {
-    '(input)': 'onChange(\$event.target.value)',
-    '(blur)': 'touchHandler()'
-  },
   providers: const [DEFAULT_VALUE_ACCESSOR],
   // TODO(b/71710685): Change to `Visibility.local` to reduce code size.
   visibility: Visibility.all,
 )
-class DefaultValueAccessor implements ControlValueAccessor {
-  HtmlElement _elementRef;
-  void Function(dynamic) onChange = (_) {};
+class DefaultValueAccessor extends Object
+    with TouchHandler, ChangeHandler<String>
+    implements ControlValueAccessor {
+  final HtmlElement _element;
 
-  void touchHandler() {
-    onTouched();
+  DefaultValueAccessor(this._element);
+
+  @HostListener('input', ['\$event.target.value'])
+  void handleChange(String value) {
+    onChange(value, rawValue: value);
   }
 
-  void Function() onTouched = () {};
-  DefaultValueAccessor(this._elementRef);
   @override
-  void writeValue(dynamic value) {
+  void writeValue(value) {
     var normalizedValue = value ?? '';
-    js_util.setProperty(_elementRef, 'value', normalizedValue);
+    js_util.setProperty(_element, 'value', normalizedValue);
   }
 
   @override
-  void registerOnChange(void fn(dynamic _, {String rawValue})) {
-    onChange = (value) {
-      fn(value, rawValue: value);
-    };
-  }
-
-  @override
-  void registerOnTouched(void fn()) {
-    onTouched = fn;
-  }
+  void onDisabledChanged(bool isDisabled) {}
 }

@@ -7,7 +7,7 @@ import 'checkbox_value_accessor.dart';
 export 'checkbox_value_accessor.dart';
 import 'dart:html';
 import 'package:angular/angular.dart';
-import 'control_value_accessor.dart' show ChangeFunction, ControlValueAccessor, NG_VALUE_ACCESSOR, TouchFunction;
+import 'control_value_accessor.dart' show ChangeHandler, ControlValueAccessor, NG_VALUE_ACCESSOR, TouchHandler;
 import 'control_value_accessor.template.dart' as _ref0;
 import 'package:angular/angular.template.dart' as _ref1;
 

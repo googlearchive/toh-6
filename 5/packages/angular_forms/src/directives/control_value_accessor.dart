@@ -15,6 +15,13 @@ abstract class ControlValueAccessor<T> {
 
   /// Set the function to be called when the control receives a touch event.
   void registerOnTouched(TouchFunction f);
+
+  /// This function is called when the control status changes to or
+  /// from "DISABLED".
+  ///
+  /// Depending on the value, it will enable or disable the
+  /// appropriate DOM element.
+  void onDisabledChanged(bool isDisabled);
 }
 
 /// Used to provide a [ControlValueAccessor] for form controls.
@@ -29,3 +36,34 @@ typedef dynamic ChangeFunction<T>(T value, {String rawValue});
 
 /// Type of the function to be called when the control receives a touch event.
 typedef dynamic TouchFunction();
+
+/// A mixin to add touch support to a [ControlValueAccessor].
+///
+/// **NOTE**: This will add a [HostListener] on the `blur` event.
+class TouchHandler {
+  // TODO(alorenzen): Make this private.
+  TouchFunction onTouched = () {};
+
+  @HostListener('blur')
+  void touchHandler() {
+    onTouched();
+  }
+
+  /// Set the function to be called when the control receives a touch event.
+  void registerOnTouched(TouchFunction fn) {
+    onTouched = fn;
+  }
+}
+
+/// A mixin to add change handler registration to a [ControlValueAccessor].
+///
+/// **NOTE**: It is expected that all subclasses will implement their own
+/// [HostListener] to actually call the [onChange] callback..
+class ChangeHandler<T> {
+  ChangeFunction<T> onChange = (T _, {String rawValue}) {};
+
+  /// Set the function to be called when the control receives a change event.
+  void registerOnChange(ChangeFunction<T> fn) {
+    onChange = fn;
+  }
+}

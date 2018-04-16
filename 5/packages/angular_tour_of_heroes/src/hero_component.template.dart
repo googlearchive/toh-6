@@ -11,12 +11,14 @@ import 'package:angular_forms/angular_forms.dart';
 import 'package:angular_router/angular_router.dart';
 import 'hero.dart';
 import 'hero_service.dart';
+import 'route_paths.dart' as paths;
 import 'package:angular/src/di/reflector.dart' as _ngRef;
 import 'hero.template.dart' as _ref0;
 import 'hero_service.template.dart' as _ref1;
 import 'package:angular/angular.template.dart' as _ref2;
 import 'package:angular_forms/angular_forms.template.dart' as _ref3;
 import 'package:angular_router/angular_router.template.dart' as _ref4;
+import 'route_paths.template.dart' as _ref5;
 import 'package:angular_tour_of_heroes/src/hero_component.css.shim.dart' as import0;
 import 'package:angular/src/core/linker/app_view.dart';
 import 'hero_component.dart' as import2;
@@ -44,7 +46,7 @@ class ViewHeroComponent0 extends AppView<import2.HeroComponent> {
   ViewContainer _appEl_0;
   NgIf _NgIf_0_9;
   static RenderComponentType _renderType;
-  ViewHeroComponent0(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.COMPONENT, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  ViewHeroComponent0(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.component, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     rootEl = import8.document.createElement('my-hero');
     _renderType ??= import9.appViewUtils.createRenderType('', ViewEncapsulation.Emulated, styles$HeroComponent);
     setupComponentType(_renderType);
@@ -53,7 +55,7 @@ class ViewHeroComponent0 extends AppView<import2.HeroComponent> {
   ComponentRef<import2.HeroComponent> build() {
     final _rootEl = rootEl;
     final import8.HtmlElement parentRenderNode = initViewRoot(_rootEl);
-    var _anchor_0 = ngAnchor.clone(false);
+    final _anchor_0 = createViewContainerAnchor();
     parentRenderNode.append(_anchor_0);
     _appEl_0 = new ViewContainer(0, null, this, _anchor_0);
     TemplateRef _TemplateRef_0_8 = new TemplateRef(_appEl_0, viewFactory_HeroComponent1);
@@ -96,7 +98,7 @@ class _ViewHeroComponent1 extends AppView<import2.HeroComponent> {
   import8.ButtonElement _el_13;
   var _expr_0;
   var _expr_1;
-  _ViewHeroComponent1(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.EMBEDDED, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
+  _ViewHeroComponent1(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.embedded, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways) {
     componentType = ViewHeroComponent0._renderType;
   }
   @override
@@ -136,8 +138,8 @@ class _ViewHeroComponent1 extends AppView<import2.HeroComponent> {
     addShimC(_el_13);
     import8.Text _text_14 = new import8.Text('Save');
     _el_13.append(_text_14);
-    _el_10.addEventListener('input', eventHandler1(_handle_input_10_1));
     _el_10.addEventListener('blur', eventHandler0(_DefaultValueAccessor_10_5.touchHandler));
+    _el_10.addEventListener('input', eventHandler1(_handle_input_10_2));
     final subscription_0 = _NgModel_10_7.update.listen(eventHandler1(_handle_ngModelChange_10_0));
     _el_11.addEventListener('click', eventHandler0(ctx.goBack));
     _el_13.addEventListener('click', eventHandler0(ctx.save));
@@ -186,8 +188,8 @@ class _ViewHeroComponent1 extends AppView<import2.HeroComponent> {
     ctx.hero.name = $event;
   }
 
-  void _handle_input_10_1($event) {
-    _DefaultValueAccessor_10_5.onChange($event.target.value);
+  void _handle_input_10_2($event) {
+    _DefaultValueAccessor_10_5.handleChange($event.target.value);
   }
 }
 
@@ -200,7 +202,7 @@ const List<dynamic> styles$HeroComponentHost = const [];
 class _ViewHeroComponentHost0 extends AppView<dynamic> {
   ViewHeroComponent0 _compView_0;
   import2.HeroComponent _HeroComponent_0_5;
-  _ViewHeroComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.HOST, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
+  _ViewHeroComponentHost0(AppView<dynamic> parentView, int parentIndex) : super(import6.ViewType.host, {}, parentView, parentIndex, ChangeDetectionStrategy.CheckAlways);
   @override
   ComponentRef build() {
     _compView_0 = new ViewHeroComponent0(this, 0);
@@ -241,4 +243,5 @@ void initReflector() {
   _ref2.initReflector();
   _ref3.initReflector();
   _ref4.initReflector();
+  _ref5.initReflector();
 }
