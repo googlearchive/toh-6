@@ -21,8 +21,6 @@ const NUMBER_VALUE_ACCESSOR = const ExistingProvider.forToken(
       'input[type=number][ngFormControl],'
       'input[type=number][ngModel]',
   providers: const [NUMBER_VALUE_ACCESSOR],
-  // TODO(b/71710685): Change to `Visibility.local` to reduce code size.
-  visibility: Visibility.all,
 )
 class NumberValueAccessor extends Object
     with TouchHandler, ChangeHandler<double>
@@ -43,5 +41,7 @@ class NumberValueAccessor extends Object
   }
 
   @override
-  void onDisabledChanged(bool isDisabled) {}
+  void onDisabledChanged(bool isDisabled) {
+    _element.disabled = isDisabled;
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:angular/angular.dart';
 
 import '../model.dart' show ControlGroup;
@@ -57,11 +59,13 @@ import 'validators.dart' show ValidatorFn;
     const ExistingProvider(ControlContainer, NgControlGroup),
   ],
   exportAs: 'ngForm',
-  visibility: Visibility.all,
 )
 class NgControlGroup extends ControlContainer implements OnInit, OnDestroy {
   final ValidatorFn validator;
   final ControlContainer _parent;
+
+  bool _isDisabled = false;
+  bool _disabledChanged = false;
 
   NgControlGroup(@SkipSelf() this._parent,
       @Optional() @Self() @Inject(NG_VALIDATORS) List validators)
@@ -73,9 +77,26 @@ class NgControlGroup extends ControlContainer implements OnInit, OnDestroy {
     super.name = value;
   }
 
+  @Input('ngDisabled')
+  set disabled(bool isDisabled) {
+    _isDisabled = isDisabled;
+    if (control != null) {
+      _disabledChanged = false;
+      toggleDisabled(isDisabled);
+    } else {
+      _disabledChanged = true;
+    }
+  }
+
   @override
   void ngOnInit() {
     formDirective.addControlGroup(this);
+    if (_disabledChanged) {
+      scheduleMicrotask(() {
+        _disabledChanged = false;
+        toggleDisabled(_isDisabled);
+      });
+    }
   }
 
   @override

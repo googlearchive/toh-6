@@ -2,6 +2,8 @@ import 'dart:html';
 import 'dart:js_util' as js_util;
 
 import 'package:angular/angular.dart';
+import 'package:angular_forms/src/directives/shared.dart'
+    show setElementDisabled;
 
 import 'control_value_accessor.dart';
 
@@ -23,8 +25,6 @@ const DEFAULT_VALUE_ACCESSOR = const ExistingProvider.forToken(
       'input:not([type=checkbox])[ngModel],'
       'textarea[ngModel],[ngDefaultControl]',
   providers: const [DEFAULT_VALUE_ACCESSOR],
-  // TODO(b/71710685): Change to `Visibility.local` to reduce code size.
-  visibility: Visibility.all,
 )
 class DefaultValueAccessor extends Object
     with TouchHandler, ChangeHandler<String>
@@ -45,5 +45,7 @@ class DefaultValueAccessor extends Object
   }
 
   @override
-  void onDisabledChanged(bool isDisabled) {}
+  void onDisabledChanged(bool isDisabled) {
+    setElementDisabled(_element, isDisabled);
+  }
 }

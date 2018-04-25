@@ -149,9 +149,6 @@ class _ViewHeroComponent1 extends AppView<import2.HeroComponent> {
 
   @override
   dynamic injectorGetInternal(dynamic token, int nodeIndex, dynamic notFoundResult) {
-    if ((identical(token, import12.DefaultValueAccessor) && (10 == nodeIndex))) {
-      return _DefaultValueAccessor_10_5;
-    }
     if ((identical(token, const import15.MultiToken<import16.ControlValueAccessor>('NgValueAccessor')) && (10 == nodeIndex))) {
       return _NgValueAccessor_10_6;
     }
