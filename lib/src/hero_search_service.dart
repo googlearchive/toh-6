@@ -15,7 +15,7 @@ class HeroSearchService {
   Future<List<Hero>> search(String term) async {
     try {
       final response = await _http.get('app/heroes/?name=$term');
-      return _extractData(response)
+      return (_extractData(response) as List)
           .map((json) => new Hero.fromJson(json))
           .toList();
     } catch (e) {

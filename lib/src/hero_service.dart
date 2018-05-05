@@ -18,8 +18,8 @@ class HeroService {
   Future<List<Hero>> getAll() async {
     try {
       final response = await _http.get(_heroesUrl);
-      final heroes = _extractData(response)
-          .map((value) => new Hero.fromJson(value))
+      final heroes = (_extractData(response) as List)
+          .map((json) => new Hero.fromJson(json))
           .toList();
       return heroes;
     } catch (e) {
