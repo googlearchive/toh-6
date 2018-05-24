@@ -11,6 +11,7 @@ import 'package:angular_tour_of_heroes/src/hero_list_component.template.dart'
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pageloader/html.dart';
 import 'package:test/test.dart';
 
 import 'heroes.template.dart' as self;
@@ -40,7 +41,9 @@ void main() {
   setUp(() async {
     InMemoryDataService.resetDb();
     fixture = await testBed.create();
-    po = await new HeroesPO().resolve(fixture);
+    final context =
+        new HtmlPageLoaderElement.createFromElement(fixture.rootElement);
+    po = new HeroesPO.create(context);
   });
 
   tearDown(disposeAnyRunningTest);
@@ -52,44 +55,41 @@ void main() {
 }
 
 void basicTests() {
-  test('title', () async {
-    expect(await po.title, 'Heroes');
+  test('title', () {
+    expect(po.title, 'Heroes');
   });
 
-  test('hero count', () async {
+  test('hero count', () {
     expect(po.heroes.length, numHeroes);
   });
 
-  test('no selected hero', () async {
-    expect(await po.selected, null);
+  test('no selected hero', () {
+    expect(po.selected, null);
   });
 }
 
 void selectedHeroTests(InjectorProbe injector) {
   setUp(() async {
     await po.selectHero(targetHeroIndex);
-    po = await new HeroesPO().resolve(fixture);
   });
 
-  test('is selected', () async {
-    expect(await po.selected, targetHero);
+  test('is selected', () {
+    expect(po.selected, targetHero);
   });
 
-  test('show mini-detail', () async {
-    expect(
-        await po.myHeroNameInUppercase, equalsIgnoringCase(targetHero['name']));
+  test('show mini-detail', () {
+    expect(po.myHeroNameInUppercase, equalsIgnoringCase(targetHero['name']));
   });
 
   test('go to detail', () async {
     await po.gotoDetail();
     final mockRouter = injector.get<MockRouter>(Router);
-    final c = verify(mockRouter.navigate(typed(captureAny)));
+    final c = verify(mockRouter.navigate(captureAny));
     expect(c.captured.single, '/heroes/${targetHero[idParam]}');
   });
 
   test('select another hero', () async {
     await po.selectHero(0);
-    po = await new HeroesPO().resolve(fixture);
     final heroData = {'id': 11, 'name': 'Mr. Nice'};
     expect(await po.selected, heroData);
   });
@@ -100,7 +100,7 @@ void addHeroTests() {
 
   setUp(() async {
     await po.addHero(newHeroName);
-    po = await new HeroesPO().resolve(fixture);
+    await fixture.update();
   });
 
   test('hero count', () async {
@@ -109,10 +109,9 @@ void addHeroTests() {
 
   test('select new hero', () async {
     await po.selectHero(numHeroes);
-    po = await new HeroesPO().resolve(fixture);
     expect(po.heroes.length, numHeroes + 1);
-    expect((await po.selected)['name'], newHeroName);
-    expect(await po.myHeroNameInUppercase, equalsIgnoringCase(newHeroName));
+    expect(po.selected['name'], newHeroName);
+    expect(po.myHeroNameInUppercase, equalsIgnoringCase(newHeroName));
   });
 }
 
@@ -120,17 +119,16 @@ void deleteHeroTests() {
   List<Map> heroesWithoutTarget = [];
 
   setUp(() async {
-    heroesWithoutTarget = await inIndexOrder(po.heroes).toList()
-      ..removeAt(targetHeroIndex);
+    heroesWithoutTarget = po.heroes.toList()..removeAt(targetHeroIndex);
     await po.deleteHero(targetHeroIndex);
-    po = await new HeroesPO().resolve(fixture);
+    await fixture.update();
   });
 
-  test('hero count', () async {
+  test('hero count', () {
     expect(po.heroes.length, numHeroes - 1);
   });
 
-  test('heroes left', () async {
-    expect(await inIndexOrder(po.heroes).toList(), heroesWithoutTarget);
+  test('heroes left', () {
+    expect(po.heroes, heroesWithoutTarget);
   });
 }

@@ -1,32 +1,34 @@
 import 'dart:async';
 
-import 'package:pageloader/objects.dart';
-import 'utils.dart';
+import 'package:pageloader/pageloader.dart';
 
-class DashboardPO extends PageObjectBase {
-  @FirstByCss('h3')
-  PageLoaderElement get _title => q('h3');
+part 'dashboard_po.g.dart';
+
+@PageObject()
+abstract class DashboardPO {
+  DashboardPO();
+  factory DashboardPO.create(PageLoaderElement context) = $DashboardPO.create;
+
+  @First(ByCss('h3'))
+  PageLoaderElement get _title;
 
   @ByTagName('a')
-  List<PageLoaderElement> get _heroes => qq('a');
+  List<PageLoaderElement> get _heroes;
 
   @ByTagName('input')
-  PageLoaderElement get search => q('input');
+  PageLoaderElement get search;
 
   @ByCss('div[id="search-component"] div div')
-  List<PageLoaderElement> get _heroesFound =>
-      qq('div[id="search-component"] div div');
+  List<PageLoaderElement> get _heroesFound;
 
   @ByCss('div[id="search-component"]')
-  PageLoaderElement get heroSearchDiv => q('div[id="search-component"]');
+  PageLoaderElement get heroSearchDiv;
 
-  Future<String> get title => _title.visibleText;
+  String get title => _title.visibleText;
 
-  Future<List<String>> get heroNames =>
-      inIndexOrder(_heroes.map((el) => el.visibleText)).toList();
+  Iterable<String> get heroNames => _heroes.map((el) => el.visibleText);
 
-  Future selectHero(int index) => _heroes[index].click();
+  Future<void> selectHero(int index) => _heroes[index].click();
 
-  Future<List<String>> get heroesFound =>
-      inIndexOrder(_heroesFound.map((el) => el.visibleText)).toList();
+  Iterable<String> get heroesFound => _heroesFound.map((el) => el.visibleText);
 }

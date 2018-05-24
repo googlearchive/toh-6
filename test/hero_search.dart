@@ -12,6 +12,7 @@ import 'package:angular_tour_of_heroes/src/hero_search_component.template.dart'
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pageloader/html.dart';
 import 'package:test/test.dart';
 
 import 'hero_search.template.dart' as self;
@@ -37,17 +38,19 @@ void main() {
   setUp(() async {
     InMemoryDataService.resetDb();
     fixture = await testBed.create();
-    po = await new HeroSearchPO().resolve(fixture);
+    final context =
+        new HtmlPageLoaderElement.createFromElement(fixture.rootElement);
+    po = new HeroSearchPO.create(context);
   });
 
   tearDown(disposeAnyRunningTest);
 
-  test('title', () async {
-    expect(await po.title, 'Hero Search');
+  test('title', () {
+    expect(po.title, 'Hero Search');
   });
 
-  test('initially no heroes found', () async {
-    expect(await po.heroNames, []);
+  test('initially no heroes found', () {
+    expect(po.heroNames, []);
   });
 
   group('Search hero:', () => heroSearchTests(injector));
@@ -60,26 +63,26 @@ void heroSearchTests(InjectorProbe injector) {
     await _typeSearchTextAndRefreshPO(searchText);
   });
 
-  test('list heroes matching ${searchText}', () async {
+  test('list heroes matching ${searchText}', () {
     final matchedHeroNames = [
       'Magneta',
       'RubberMan',
       'Dynama',
       'Magma',
     ];
-    expect(await po.heroNames, matchedHeroNames);
+    expect(po.heroNames, matchedHeroNames);
   });
 
   test('list heroes matching ${searchText}g', () async {
     await _typeSearchTextAndRefreshPO('g');
-    expect(await po.heroNames, ['Magneta', 'Magma']);
+    expect(po.heroNames, ['Magneta', 'Magma']);
   });
 
   test('select hero and navigate to detail', () async {
     final mockRouter = injector.get<MockRouter>(Router);
     clearInteractions(mockRouter);
     await po.selectHero(0);
-    final c = verify(mockRouter.navigate(typed(captureAny)));
+    final c = verify(mockRouter.navigate(captureAny));
     expect(c.captured.single, '/heroes/15');
   });
 }
@@ -89,5 +92,5 @@ Future _typeSearchTextAndRefreshPO(String searchText) async {
   await fixture.update((c) => firstHero = c.heroes.first);
   await po.search.type(searchText);
   await firstHero;
-  po = await new HeroSearchPO().resolve(fixture);
+  await fixture.update();
 }

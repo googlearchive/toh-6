@@ -1,31 +1,33 @@
 import 'dart:async';
 
-import 'package:pageloader/objects.dart';
-import 'utils.dart';
+import 'package:pageloader/pageloader.dart';
 
-class AppPO extends PageObjectBase {
+part 'app_po.g.dart';
+
+@PageObject()
+abstract class AppPO {
+  AppPO();
+  factory AppPO.create(PageLoaderElement context) = $AppPO.create;
+
   @ByTagName('h1')
-  PageLoaderElement get _h1 => q('h1');
+  PageLoaderElement get _h1;
 
   @ByCss('nav a')
-  List<PageLoaderElement> get _tabLinks => qq('nav a');
+  List<PageLoaderElement> get _tabLinks;
 
   @ByTagName('my-dashboard')
-  @optional
-  PageLoaderElement get _myDashboard => q('my-dashboard');
+  PageLoaderElement get _myDashboard;
 
   @ByTagName('my-heroes')
-  @optional
-  PageLoaderElement get _myHeroes => q('my-heroes');
+  PageLoaderElement get _myHeroes;
 
-  Future<String> get pageTitle => _h1.visibleText;
+  String get pageTitle => _h1.visibleText;
 
-  Future<List<String>> get tabTitles =>
-      inIndexOrder(_tabLinks.map((el) => el.visibleText)).toList();
+  Iterable<String> get tabTitles => _tabLinks.map((el) => el.visibleText);
 
-  Future selectTab(int index) => _tabLinks[index].click();
+  Future<void> selectTab(int index) => _tabLinks[index].click();
 
-  bool get dashboardTabIsActive => _myDashboard != null;
+  bool get dashboardTabIsActive => _myDashboard.exists;
 
-  bool get heroesTabIsActive => _myHeroes != null;
+  bool get heroesTabIsActive => _myHeroes.exists;
 }

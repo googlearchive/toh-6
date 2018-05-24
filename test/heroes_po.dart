@@ -1,67 +1,68 @@
 import 'dart:async';
 
-import 'package:pageloader/objects.dart';
+import 'package:pageloader/pageloader.dart';
 import 'utils.dart';
 
-class HeroesPO extends PageObjectBase {
-  @FirstByCss('h2')
-  PageLoaderElement get _title => q('h2');
+part 'heroes_po.g.dart';
+
+@PageObject()
+abstract class HeroesPO {
+  HeroesPO();
+  factory HeroesPO.create(PageLoaderElement context) = $HeroesPO.create;
+
+  @First(ByCss('h2'))
+  PageLoaderElement get _title;
 
   @ByTagName('li')
-  List<PageLoaderElement> get _heroes => qq('li');
+  List<PageLoaderElement> get _heroes;
 
   @ByTagName('li')
   @WithClass('selected')
-  @optional
-  PageLoaderElement get _selected => q('li.selected');
+  PageLoaderElement get _selected;
 
-  @FirstByCss('div h2')
-  @optional
-  PageLoaderElement get _miniDetailHeading => q('div h2');
+  @First(ByCss('div h2'))
+  PageLoaderElement get _miniDetailHeading;
 
   @ByTagName('button')
-  @WithVisibleText('View Details')
-  @optional
-  PageLoaderElement get _gotoDetail =>
-      q('button', withVisibleText: 'View Details');
+  @WithVisibleText('Details')
+  PageLoaderElement get _gotoDetail;
 
   @ByCss('button')
   @WithVisibleText('Add')
-  PageLoaderElement get _add => q('button', withVisibleText: 'Add');
+  PageLoaderElement get _add;
 
   @ByCss('li button')
-  List<PageLoaderElement> get _deleteHeroes => qq('li button');
+  List<PageLoaderElement> get _deleteHeroes;
 
   @ByTagName('input')
-  PageLoaderElement get _input => q('input');
+  PageLoaderElement get _input;
 
-  Future<String> get title => _title.visibleText;
+  String get title => _title.visibleText;
 
-  Iterable<Future<Map>> get heroes => _heroes.map((el) => _heroDataFromLi(el));
+  Iterable<Map> get heroes => _heroes.map((el) => _heroDataFromLi(el));
 
   Future<void> selectHero(int index) => _heroes[index].click();
   Future<void> deleteHero(int index) => _deleteHeroes[index].click();
 
-  Future<Map> get selected =>
-      _selected == null ? null : _heroDataFromLi(_selected);
+  Map get selected => _selected.exists ? _heroDataFromLi(_selected) : null;
 
-  Future<String> get myHeroNameInUppercase async {
-    if (_miniDetailHeading == null) return null;
-    final text = await _miniDetailHeading.visibleText;
-    final matches = new RegExp((r'^(.*) is my hero\s*$')).firstMatch(text);
+  String get myHeroNameInUppercase {
+    if (!_miniDetailHeading.exists) return null;
+    final text = _miniDetailHeading.visibleText;
+    final matches = new RegExp((r'^\s*(.+) is my hero\s*$')).firstMatch(text);
     return matches[1];
   }
 
   Future<void> addHero(String name) async {
     await _input.clear();
     await _input.type(name);
-    return _add.click();
+    await _add.click();
   }
 
   Future<void> gotoDetail() => _gotoDetail.click();
 
-  Future<Map<String, dynamic>> _heroDataFromLi(PageLoaderElement heroLi) async {
-    final spans = await heroLi.getElementsByCss('span').toList();
-    return heroData(await spans[0].visibleText, await spans[1].visibleText);
+  Map<String, dynamic> _heroDataFromLi(PageLoaderElement heroLi) {
+    final spans = heroLi.getElementsByCss('span').toList();
+    return heroData(spans[0].visibleText, spans[1].visibleText);
   }
 }

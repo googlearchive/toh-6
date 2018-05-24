@@ -1,23 +1,27 @@
 import 'dart:async';
 
-import 'package:pageloader/objects.dart';
+import 'package:pageloader/pageloader.dart';
 import 'utils.dart';
 
-class HeroSearchPO extends PageObjectBase {
-  @FirstByCss('h4')
-  PageLoaderElement get _title => q('h4');
+part 'hero_search_po.g.dart';
+
+@PageObject()
+abstract class HeroSearchPO {
+  HeroSearchPO();
+  factory HeroSearchPO.create(PageLoaderElement context) = $HeroSearchPO.create;
+
+  @First(ByCss('h4'))
+  PageLoaderElement get _title;
 
   @ByTagName('input')
-  PageLoaderElement get search => q('input');
+  PageLoaderElement get search;
 
   @ByCss('div[id="search-component"] div div')
-  List<PageLoaderElement> get _heroes =>
-      qq('div[id="search-component"] div div'); // heroes found
+  List<PageLoaderElement> get _heroes; // heroes found
 
-  Future<String> get title => _title.visibleText;
+  String get title => _title.visibleText;
 
-  Future<List<String>> get heroNames =>
-      inIndexOrder(_heroes.map((el) => el.visibleText)).toList();
+  Iterable<String> get heroNames => _heroes.map((el) => el.visibleText);
 
-  Future selectHero(int index) => _heroes[index].click();
+  Future<void> selectHero(int index) => _heroes[index].click();
 }

@@ -10,6 +10,7 @@ import 'package:angular_tour_of_heroes/src/hero_component.template.dart' as ng;
 import 'package:angular_tour_of_heroes/src/hero_service.dart';
 import 'package:http/http.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pageloader/html.dart';
 import 'package:test/test.dart';
 
 import 'hero.template.dart' as self;
@@ -39,7 +40,7 @@ void main() {
 
   tearDown(disposeAnyRunningTest);
 
-  test('No initial hero results in an empty view', () async {
+  test('No initial hero results in an empty view', () {
     expect(fixture.rootElement.text.trim(), '');
   });
 
@@ -60,12 +61,14 @@ void main() {
     setUp(() async {
       mockLocation = injector.get<MockLocation>(Location);
       await fixture.update((c) => c.onActivate(null, mockRouterState));
-      po = await new HeroDetailPO().resolve(fixture);
+      final context =
+          new HtmlPageLoaderElement.createFromElement(fixture.rootElement);
+      po = new HeroDetailPO.create(context);
       clearInteractions(mockLocation);
     });
 
-    test('show hero details', () async {
-      expect(await po.heroFromDetails, targetHero);
+    test('show hero details', () {
+      expect(po.heroFromDetails, targetHero);
     });
 
     test('back button', () async {
@@ -78,8 +81,8 @@ void main() {
         await po.type(nameSuffix);
       });
 
-      test('show updated name', () async {
-        expect(await po.heroFromDetails, updatedHero);
+      test('show updated name', () {
+        expect(po.heroFromDetails, updatedHero);
       });
 
       test('discard changes', () async {
