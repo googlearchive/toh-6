@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:pageloader/pageloader.dart';
-import 'utils.dart';
 
 part 'hero_search_po.g.dart';
 

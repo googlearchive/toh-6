@@ -26,7 +26,6 @@ class HeroSearchComponent implements OnInit {
 
   HeroSearchComponent(this._heroSearchService, this._router) {}
 
-  // Push a search term into the stream.
   void search(String term) => _searchTerms.add(term);
 
   Future<void> ngOnInit() async {
