@@ -16,7 +16,7 @@ class HeroSearchService {
     try {
       final response = await _http.get('app/heroes/?name=$term');
       return (_extractData(response) as List)
-          .map((json) => new Hero.fromJson(json))
+          .map((json) => Hero.fromJson(json))
           .toList();
     } catch (e) {
       throw _handleError(e);
@@ -27,6 +27,6 @@ class HeroSearchService {
 
   Exception _handleError(dynamic e) {
     print(e); // for demo purposes only
-    return new Exception('Server error; cause: $e');
+    return Exception('Server error; cause: $e');
   }
 }

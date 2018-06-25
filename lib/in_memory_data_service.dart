@@ -38,18 +38,18 @@ class InMemoryDataService extends MockClient {
               .firstWhere((hero) => hero.id == id); // throws if no match
         } else {
           String prefix = request.url.queryParameters['name'] ?? '';
-          final regExp = new RegExp(prefix, caseSensitive: false);
+          final regExp = RegExp(prefix, caseSensitive: false);
           data = _heroesDb.where((hero) => hero.name.contains(regExp)).toList();
         }
         break;
       case 'POST':
         var name = json.decode(request.body)['name'];
-        var newHero = new Hero(_nextId++, name);
+        var newHero = Hero(_nextId++, name);
         _heroesDb.add(newHero);
         data = newHero;
         break;
       case 'PUT':
-        var heroChanges = new Hero.fromJson(json.decode(request.body));
+        var heroChanges = Hero.fromJson(json.decode(request.body));
         var targetHero = _heroesDb.firstWhere((h) => h.id == heroChanges.id);
         targetHero.name = heroChanges.name;
         data = targetHero;
@@ -62,12 +62,12 @@ class InMemoryDataService extends MockClient {
       default:
         throw 'Unimplemented HTTP method ${request.method}';
     }
-    return new Response(json.encode({'data': data}), 200,
+    return Response(json.encode({'data': data}), 200,
         headers: {'content-type': 'application/json'});
   }
 
   static resetDb() {
-    _heroesDb = _initialHeroes.map((json) => new Hero.fromJson(json)).toList();
+    _heroesDb = _initialHeroes.map((json) => Hero.fromJson(json)).toList();
     _nextId = _heroesDb.map((hero) => hero.id).fold(0, max) + 1;
   }
 

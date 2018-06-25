@@ -26,14 +26,14 @@ NgTestFixture<HeroListComponent> fixture;
 HeroesPO po;
 
 @GenerateInjector([
-  const ClassProvider(Client, useClass: InMemoryDataService),
-  const ClassProvider(HeroService),
-  const ClassProvider(Router, useClass: MockRouter),
+  ClassProvider(Client, useClass: InMemoryDataService),
+  ClassProvider(HeroService),
+  ClassProvider(Router, useClass: MockRouter),
 ])
 final InjectorFactory rootInjector = self.rootInjector$Injector;
 
 void main() {
-  final injector = new InjectorProbe(rootInjector);
+  final injector = InjectorProbe(rootInjector);
   final testBed = NgTestBed.forComponent<HeroListComponent>(
       ng.HeroListComponentNgFactory,
       rootInjector: injector.factory);
@@ -42,8 +42,8 @@ void main() {
     InMemoryDataService.resetDb();
     fixture = await testBed.create();
     final context =
-        new HtmlPageLoaderElement.createFromElement(fixture.rootElement);
-    po = new HeroesPO.create(context);
+        HtmlPageLoaderElement.createFromElement(fixture.rootElement);
+    po = HeroesPO.create(context);
   });
 
   tearDown(disposeAnyRunningTest);
@@ -107,7 +107,7 @@ void addHeroTests() {
     expect(po.heroes.length, numHeroes + 1);
   });
 
-  test('select new hero', () async {
+  test('select hero', () async {
     await po.selectHero(numHeroes);
     expect(po.heroes.length, numHeroes + 1);
     expect(po.selected['name'], newHeroName);

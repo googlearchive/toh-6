@@ -4,11 +4,11 @@ import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:mockito/mockito.dart';
 
-const /* List<Provider|List<Provider>> */ routerProvidersForTesting = const [
-  const ValueProvider.forToken(appBaseHref, '/'),
+const /* List<Provider|List<Provider>> */ routerProvidersForTesting = [
+  ValueProvider.forToken(appBaseHref, '/'),
   routerProviders,
   // Mock platform location even with real router, otherwise sometimes tests hang.
-  const ClassProvider(PlatformLocation, useClass: MockPlatformLocation),
+  ClassProvider(PlatformLocation, useClass: MockPlatformLocation),
 ];
 
 //-----------------------------------------------------------------------------

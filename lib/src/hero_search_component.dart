@@ -13,7 +13,7 @@ import 'hero.dart';
   templateUrl: 'hero_search_component.html',
   styleUrls: ['hero_search_component.css'],
   directives: [coreDirectives],
-  providers: [const ClassProvider(HeroSearchService)],
+  providers: [ClassProvider(HeroSearchService)],
   pipes: [commonPipes],
 )
 class HeroSearchComponent implements OnInit {
@@ -21,8 +21,7 @@ class HeroSearchComponent implements OnInit {
   Router _router;
 
   Stream<List<Hero>> heroes;
-  StreamController<String> _searchTerms =
-      new StreamController<String>.broadcast();
+  StreamController<String> _searchTerms = StreamController<String>.broadcast();
 
   HeroSearchComponent(this._heroSearchService, this._router) {}
 
@@ -30,10 +29,10 @@ class HeroSearchComponent implements OnInit {
 
   Future<void> ngOnInit() async {
     heroes = _searchTerms.stream
-        .transform(debounce(new Duration(milliseconds: 300)))
+        .transform(debounce(Duration(milliseconds: 300)))
         .distinct()
         .transform(switchMap((term) => term.isEmpty
-            ? new Stream<List<Hero>>.fromIterable([<Hero>[]])
+            ? Stream<List<Hero>>.fromIterable([<Hero>[]])
             : _heroSearchService.search(term).asStream()))
         .handleError((e) {
       print(e); // for demo purposes only

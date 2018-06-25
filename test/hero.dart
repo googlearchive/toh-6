@@ -21,14 +21,14 @@ NgTestFixture<HeroComponent> fixture;
 HeroDetailPO po;
 
 @GenerateInjector([
-  const ClassProvider(Client, useClass: InMemoryDataService),
-  const ClassProvider(HeroService),
-  const ClassProvider(Location, useClass: MockLocation),
+  ClassProvider(Client, useClass: InMemoryDataService),
+  ClassProvider(HeroService),
+  ClassProvider(Location, useClass: MockLocation),
 ])
 final InjectorFactory rootInjector = self.rootInjector$Injector;
 
 void main() {
-  final injector = new InjectorProbe(rootInjector);
+  final injector = InjectorProbe(rootInjector);
   final testBed = NgTestBed.forComponent<HeroComponent>(
       ng.HeroComponentNgFactory,
       rootInjector: injector.factory);
@@ -53,7 +53,7 @@ void main() {
       'name': "${targetHero['name']}$nameSuffix"
     };
 
-    final mockRouterState = new MockRouterState();
+    final mockRouterState = MockRouterState();
     when(mockRouterState.parameters)
         .thenReturn({idParam: '${targetHero[idParam]}'});
     MockLocation mockLocation;
@@ -62,8 +62,8 @@ void main() {
       mockLocation = injector.get<MockLocation>(Location);
       await fixture.update((c) => c.onActivate(null, mockRouterState));
       final context =
-          new HtmlPageLoaderElement.createFromElement(fixture.rootElement);
-      po = new HeroDetailPO.create(context);
+          HtmlPageLoaderElement.createFromElement(fixture.rootElement);
+      po = HeroDetailPO.create(context);
       clearInteractions(mockLocation);
     });
 

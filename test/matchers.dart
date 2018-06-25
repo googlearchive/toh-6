@@ -2,12 +2,12 @@ import 'package:angular_router/angular_router.dart';
 import 'package:collection/collection.dart';
 import 'package:test/test.dart';
 
-IsNavParams isNavParams([dynamic expected]) => new IsNavParams(expected);
+IsNavParams isNavParams([dynamic expected]) => IsNavParams(expected);
 
 class IsNavParams extends Matcher {
   NavigationParams _expected;
   IsNavParams([NavigationParams expected]) {
-    _expected = expected == null ? new NavigationParams() : expected;
+    _expected = expected == null ? NavigationParams() : expected;
   }
   bool matches(item, Map matchState) =>
       item is NavigationParams &&

@@ -19,8 +19,8 @@ import 'src/hero_service.dart';
   styleUrls: ['app_component.css'],
   directives: [routerDirectives],
   providers: [
-    const ClassProvider(Routes),
-    const ClassProvider(HeroService),
+    ClassProvider(Routes),
+    ClassProvider(HeroService),
   ],
 )
 class AppComponent {
