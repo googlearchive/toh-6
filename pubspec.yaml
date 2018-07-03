@@ -3,18 +3,18 @@ description: Tour of Heroes
 version: 0.0.1
 
 environment:
-  sdk: '>=2.0.0-dev.64.1 <2.0.0'
+  sdk: '>=2.0.0-dev.66.0 <2.0.0'
 
 dependencies:
-  angular: ^5.0.0-alpha+15
-  angular_forms: ^2.0.0-alpha
-  angular_router: ^2.0.0-alpha
+  angular: ^5.0.0-beta
+  angular_forms: ^2.0.0-beta
+  angular_router: ^2.0.0-alpha+15
   http: ^0.11.0
   stream_transform: ^0.0.6
 
 dev_dependencies:
-  angular_test: ^2.0.0-alpha
-  build_runner: ^0.8.10
+  angular_test: ^2.0.0-beta
+  build_runner: ^0.9.0
   build_test: ^0.10.2
   build_web_compilers: ^0.4.0
   mockito: ^3.0.0-beta+1
