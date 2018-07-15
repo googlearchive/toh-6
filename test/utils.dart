@@ -28,10 +28,8 @@ class InjectorProbe {
 
 //-----------------------------------------------------------------------------
 
-@Injectable()
 class MockRouter extends Mock implements Router {}
 
-@Injectable()
 class MockPlatformLocation extends Mock implements PlatformLocation {
   String _url;
 

@@ -16,6 +16,7 @@ class IsNavParams extends Matcher {
           .equals(_expected.queryParameters, item.queryParameters) &&
       _expected.updateUrl == item.updateUrl;
 
-  Description describe(Description description) => description.add(
-      'NavigationParams(${_expected.queryParameters}, ${_expected.fragment}, ${_expected.updateUrl})');
+  Description describe(Description description) =>
+      description.add('NavigationParams(${_expected.queryParameters}, '
+          '${_expected.fragment}, ${_expected.updateUrl})');
 }
