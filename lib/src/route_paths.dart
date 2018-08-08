@@ -1,9 +1,13 @@
 import 'package:angular_router/angular_router.dart';
 
-final dashboard = RoutePath(path: 'dashboard');
-final heroes = RoutePath(path: 'heroes');
 const idParam = 'id';
-final hero = RoutePath(path: '${heroes.path}/:$idParam');
+
+class RoutePaths {
+  static final dashboard = RoutePath(path: 'dashboard');
+  static final heroes = RoutePath(path: 'heroes');
+
+  static final hero = RoutePath(path: '${heroes.path}/:$idParam');
+}
 
 int getId(Map<String, String> parameters) {
   final id = parameters[idParam];

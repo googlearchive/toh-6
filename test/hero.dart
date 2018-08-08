@@ -3,7 +3,7 @@
 import 'package:angular/angular.dart';
 import 'package:angular_router/angular_router.dart';
 import 'package:angular_test/angular_test.dart';
-import 'package:angular_tour_of_heroes/src/route_paths.dart' show idParam;
+import 'package:angular_tour_of_heroes/src/route_paths.dart';
 import 'package:angular_tour_of_heroes/in_memory_data_service.dart';
 import 'package:angular_tour_of_heroes/src/hero_component.dart';
 import 'package:angular_tour_of_heroes/src/hero_component.template.dart' as ng;
@@ -48,14 +48,14 @@ void main() {
 
   group('${targetHero['name']} initial hero:', () {
     const nameSuffix = 'X';
-    final Map updatedHero = {
-      'id': targetHero[idParam],
+    final Map updatedHero = <String, dynamic>{
+      'id': targetHero['id'],
       'name': "${targetHero['name']}$nameSuffix"
     };
 
     final mockRouterState = MockRouterState();
     when(mockRouterState.parameters)
-        .thenReturn({idParam: '${targetHero[idParam]}'});
+        .thenReturn({idParam: '${targetHero['id']}'});
     MockLocation mockLocation;
 
     setUp(() async {
